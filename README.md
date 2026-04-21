@@ -2,7 +2,13 @@
 
 An AI-powered revenue and marketing insight engine that automatically
 analyzes business data, detects anomalies, and generates plain-English
-recommendations — no analyst required.
+recommendations.
+
+The result is a deployable, interactive dashboard that answers three questions every business leader needs answered daily:
+•	What changed in our key metrics?
+•	Why did it change?
+•	What should we do next?
+
 
 ## What it does
 
