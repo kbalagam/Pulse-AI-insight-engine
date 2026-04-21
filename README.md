@@ -1,4 +1,4 @@
-# AI Growth Analyst
+# Pulse - AI Insight Engine
 
 An AI-powered revenue and marketing insight engine that automatically
 analyzes business data, detects anomalies, and generates plain-English
