@@ -57,7 +57,7 @@ by removing `data/processed/` from `.gitignore`.
 | Language    | Python 3.11              |
 | Processing  | pandas, NumPy            |
 | Storage     | Parquet (pyarrow)        |
-| AI          | Google Gemini 1.5 Flash  |
+| AI          | Google Gemini 2.0        |
 | Frontend    | Streamlit                |
 | Hosting     | Streamlit Community Cloud|
 | Charts      | Plotly                   |
