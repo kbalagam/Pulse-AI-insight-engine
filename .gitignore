@@ -5,3 +5,4 @@ data/raw/
 data/processed/
 reports/output/
 .streamlit/secrets.toml
+.DS_Store
