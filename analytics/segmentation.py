@@ -1,65 +1,62 @@
 """
 RFM Customer Segmentation.
 
+Reads from data/processed/rfm_input.csv — a pre-aggregated file containing
+one row per customer with recency, frequency, and monetary values already
+computed from raw transactions. This file is committed to the repo so the
+module works on Streamlit Cloud without raw CSV access.
+
 RFM stands for Recency, Frequency, Monetary:
-    Recency   - How recently did the customer make a purchase? (days ago)
-    Frequency - How many times have they purchased?
-    Monetary  - How much total revenue have they generated?
+    Recency   - Days since last purchase (lower = more recent = better)
+    Frequency - Number of purchases (higher = better)
+    Monetary  - Total revenue generated (higher = better)
 
 Scoring:
-    Each dimension is scored 1-4 using quartile binning.
-    R: lower days = better = score 4 (inverted quartile)
-    F: higher count = better = score 4
-    M: higher revenue = better = score 4
+    Each dimension scored 1-4 via quartile binning.
+    R: inverted — fewer days = score 4
+    F: higher count = score 4
+    M: higher revenue = score 4
 
 Segments (5 standard business segments):
-    Champions     R=4, F>=3         Best customers — bought recently and often
-    Loyal         R>=3, F>=3        Consistent buyers, high value
-    At Risk       R<=2, F>=3        Used to buy often but haven't recently
-    New           R=4, F=1          Bought recently but only once
-    Lost          R<=2, F<=2        Haven't bought in a long time, low frequency
+    Champions  R=4, F>=3   Bought recently and often — best customers
+    Loyal      R>=3, F>=3  Consistent buyers with high value
+    At Risk    R<=2, F>=3  Used to buy often but haven't recently
+    New        R=4, F=1    First-time buyers — recently acquired
+    Lost       R<=2, F<=2  Low recency and frequency — likely churned
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
 
-RAW_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+PROCESSED_DIR = Path(__file__).resolve().parents[1] / "data" / "processed"
 
 
-def load_transactions_raw() -> pd.DataFrame:
-    df = pd.read_csv(RAW_DIR / "transactions.csv")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df[df["refund_flag"] == 0].copy()
-    df = df[df["gross_revenue"] > 0].copy()
-    return df
+def load_rfm_input() -> pd.DataFrame:
+    """Loads pre-aggregated RFM input from processed directory."""
+    try:
+        return pd.read_parquet(PROCESSED_DIR / "rfm_input.parquet")
+    except Exception:
+        return pd.read_csv(PROCESSED_DIR / "rfm_input.csv")
 
 
-def compute_rfm(df: pd.DataFrame = None) -> pd.DataFrame:
+def compute_rfm() -> pd.DataFrame:
     """
-    Computes R, F, M values per customer.
-    Reference date = last transaction date in the dataset.
+    Scores and segments customers from the pre-aggregated RFM input.
+    Returns one row per customer with R/F/M scores and segment label.
     """
-    if df is None:
-        df = load_transactions_raw()
-
-    reference_date = df["timestamp"].max()
-
-    rfm = df.groupby("customer_id").agg(
-        recency=("timestamp",    lambda x: (reference_date - x.max()).days),
-        frequency=("transaction_id", "count"),
-        monetary=("gross_revenue",   "sum"),
-    ).reset_index()
-
-    # Remove edge cases
+    rfm = load_rfm_input().copy()
     rfm = rfm[rfm["monetary"] > 0].copy()
 
-    # Score each dimension 1-4 using quartiles
-    rfm["r_score"] = pd.qcut(rfm["recency"],   q=4, labels=[4,3,2,1]).astype(int)
-    rfm["f_score"] = pd.qcut(rfm["frequency"].rank(method="first"), q=4, labels=[1,2,3,4]).astype(int)
-    rfm["m_score"] = pd.qcut(rfm["monetary"].rank(method="first"),  q=4, labels=[1,2,3,4]).astype(int)
-
-    rfm["rfm_score"] = rfm["r_score"].astype(str) + rfm["f_score"].astype(str) + rfm["m_score"].astype(str)
+    rfm["r_score"] = pd.qcut(
+        rfm["recency"], q=4, labels=[4,3,2,1]
+    ).astype(int)
+    rfm["f_score"] = pd.qcut(
+        rfm["frequency"].rank(method="first"), q=4, labels=[1,2,3,4]
+    ).astype(int)
+    rfm["m_score"] = pd.qcut(
+        rfm["monetary"].rank(method="first"), q=4, labels=[1,2,3,4]
+    ).astype(int)
 
     rfm["segment"] = rfm.apply(_assign_segment, axis=1)
     return rfm
@@ -109,10 +106,9 @@ SEGMENT_META = {
 
 
 def segment_summary(rfm: pd.DataFrame) -> pd.DataFrame:
-    """Returns per-segment aggregate stats for dashboard display."""
     summary = rfm.groupby("segment").agg(
         customer_count=("customer_id", "count"),
-        avg_recency=("recency",   "mean"),
+        avg_recency=("recency",    "mean"),
         avg_frequency=("frequency","mean"),
         avg_monetary=("monetary",  "mean"),
         total_revenue=("monetary", "sum"),
@@ -128,14 +124,15 @@ def segment_summary(rfm: pd.DataFrame) -> pd.DataFrame:
 
 
 def rfm_summary_for_ai(rfm: pd.DataFrame, summary: pd.DataFrame) -> dict:
-    """Compact context dict for Gemini prompt."""
-    top_seg = summary.sort_values("total_revenue", ascending=False).iloc[0]
+    top = summary.sort_values("total_revenue", ascending=False).iloc[0]
     at_risk = summary[summary["segment"] == "At Risk"]
+    champ   = summary[summary["segment"] == "Champions"]
+    lost    = summary[summary["segment"] == "Lost"]
     return {
         "total_customers":     len(rfm),
-        "top_segment":         top_seg["segment"],
-        "top_segment_revenue": round(float(top_seg["total_revenue"]), 2),
+        "top_segment":         top["segment"],
+        "top_segment_revenue": round(float(top["total_revenue"]), 2),
         "at_risk_count":       int(at_risk["customer_count"].values[0]) if len(at_risk) else 0,
-        "champions_pct":       float(summary[summary["segment"]=="Champions"]["pct_customers"].values[0]) if len(summary[summary["segment"]=="Champions"]) else 0,
-        "lost_pct":            float(summary[summary["segment"]=="Lost"]["pct_customers"].values[0]) if len(summary[summary["segment"]=="Lost"]) else 0,
+        "champions_pct":       float(champ["pct_customers"].values[0]) if len(champ) else 0,
+        "lost_pct":            float(lost["pct_customers"].values[0]) if len(lost) else 0,
     }
