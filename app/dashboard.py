@@ -699,9 +699,9 @@ st.markdown(f"""
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏠 Overview","🚨 Anomalies","📣 Channels",
-    "📦 Products","🤖 AI Insights","📄 Report",
+    "📦 Products","🤖 AI Insights","📄 Report","📈 Advanced Analytics",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1452,3 +1452,423 @@ RECOMMENDED ACTIONS
         """.strip()
         with st.expander("📄 View sample report structure", expanded=True):
             st.code(sample, language=None)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TAB 7 — ADVANCED ANALYTICS
+# ═══════════════════════════════════════════════════════════════════════════
+with tab7:
+    st.markdown('<div class="section-header">Advanced Analytics</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-sub">'
+        'Forecasting, customer segmentation, and cohort retention — '
+        'three analytical techniques that go beyond dashboards into predictive '
+        'and behavioural intelligence.'
+        '</div>', unsafe_allow_html=True)
+
+    # ── SECTION 1: FORECASTING ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<div class="section-header">🔮 Revenue Forecast</div>', unsafe_allow_html=True)
+
+    with st.expander("📖 What is forecasting and how does Pulse compute it?"):
+        st.markdown(f"""
+        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
+          <strong>What it is:</strong><br>
+          Revenue forecasting uses historical patterns — trend, seasonality, and
+          noise — to predict what revenue is likely to look like in the coming days.
+          It does not guarantee the future; it quantifies the most probable range
+          based on past behaviour.<br><br>
+
+          <strong>How Pulse computes it:</strong><br>
+          Pulse uses <strong>Holt-Winters Exponential Smoothing</strong> — a
+          time-series method that models three components simultaneously:<br>
+          &nbsp;&nbsp;• <em>Level</em> — the current baseline revenue<br>
+          &nbsp;&nbsp;• <em>Trend</em> — whether revenue is growing or declining<br>
+          &nbsp;&nbsp;• <em>Seasonality</em> — repeating weekly patterns (e.g. weekday vs weekend)<br><br>
+          The model is fitted on all 3 years of daily data (1,095 data points),
+          then extrapolated forward. The shaded band shows the 95% confidence
+          interval — the range where actual revenue is expected to fall 95% of the time.<br><br>
+
+          <strong>What to look for:</strong><br>
+          &nbsp;&nbsp;• Is the forecast trending up or down from recent actuals?<br>
+          &nbsp;&nbsp;• How wide is the confidence band? Wider = more uncertainty.<br>
+          &nbsp;&nbsp;• Do the seasonal dips in the forecast match known slow periods?<br><br>
+
+          <strong>Business application:</strong><br>
+          Used in budgeting, inventory planning, marketing spend allocation,
+          and setting realistic revenue targets for stakeholders.
+        </div>""", unsafe_allow_html=True)
+
+    # Forecast controls
+    fc1, fc2 = st.columns([1, 3])
+    with fc1:
+        horizon = st.select_slider(
+            "Forecast horizon",
+            options=[30, 60, 90],
+            value=90,
+            format_func=lambda x: f"{x} days",
+        )
+
+    with st.spinner("Building forecast model..."):
+        try:
+            from analytics.forecasting import build_forecast, forecast_summary
+            forecast_df = build_forecast(horizon_days=horizon)
+            fc_summary  = forecast_summary(forecast_df)
+
+            actual_df = forecast_df[forecast_df["actual"].notna()].copy()
+            future_df = forecast_df[forecast_df["actual"].isna()].copy()
+
+            fig_fc = go.Figure()
+
+            # Confidence band
+            fig_fc.add_trace(go.Scatter(
+                x=pd.concat([future_df["date"], future_df["date"].iloc[::-1]]),
+                y=pd.concat([future_df["upper_ci"], future_df["lower_ci"].iloc[::-1]]),
+                fill="toself",
+                fillcolor="rgba(155,28,28,0.1)",
+                line=dict(color="rgba(0,0,0,0)"),
+                name="95% Confidence Band",
+                showlegend=True,
+            ))
+
+            # Forecast line
+            fig_fc.add_trace(go.Scatter(
+                x=future_df["date"], y=future_df["forecast"],
+                mode="lines", name="Forecast",
+                line=dict(color=CRIMSON, width=2, dash="dash"),
+            ))
+
+            # Actual line (last 90 days for context)
+            recent_actual = actual_df.tail(90)
+            fig_fc.add_trace(go.Scatter(
+                x=recent_actual["date"], y=recent_actual["actual"],
+                mode="lines", name="Actual Revenue",
+                line=dict(color=CHARCOAL, width=2.5),
+            ))
+
+            fig_fc.update_layout(**_base_layout(
+                height=330,
+                x_title="Date",
+                y_title="Revenue (USD)",
+            ))
+            fig_fc.update_yaxes(tickprefix="$")
+            st.plotly_chart(fig_fc, use_container_width=True)
+
+            # Forecast KPI strip
+            kf1, kf2, kf3, kf4 = st.columns(4)
+            for col, label, val in [
+                (kf1, "Last 30d Avg Revenue",   f"${fc_summary['avg_actual_30d']:,.0f}"),
+                (kf2, "Forecast Avg Revenue",   f"${fc_summary['avg_forecast']:,.0f}"),
+                (kf3, "Expected Change",
+                    f"{'▲' if fc_summary['forecast_change_pct']>0 else '▼'} "
+                    f"{abs(fc_summary['forecast_change_pct']):.1f}%"),
+                (kf4, "Forecast Horizon",        f"{fc_summary['forecast_horizon_days']} days"),
+            ]:
+                color = GREEN if "▲" in val else (RED_ACCENT if "▼" in val else TEXT_DARK)
+                with col:
+                    st.markdown(f"""
+                    <div class="kpi-card" style="height:auto;padding:0.75rem 0.95rem;">
+                      <div class="kpi-label">{label}</div>
+                      <div class="kpi-value" style="font-size:1.25rem;color:{color};">{val}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            graph_ai_expander("forecast",
+                f"Revenue forecast for next {horizon} days. "
+                f"Last 30d avg: ${fc_summary['avg_actual_30d']:,.0f}. "
+                f"Forecast avg: ${fc_summary['avg_forecast']:,.0f}. "
+                f"Expected change: {fc_summary['forecast_change_pct']:+.1f}%.",
+                ai_toggle)
+
+        except ImportError:
+            st.warning(
+                "statsmodels is required for forecasting. "
+                "Run `pip install statsmodels` and restart the app."
+            )
+        except Exception as e:
+            st.error(f"Forecasting error: {e}")
+
+    # ── SECTION 2: RFM SEGMENTATION ────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<div class="section-header">👥 Customer Segmentation (RFM)</div>',
+                unsafe_allow_html=True)
+
+    with st.expander("📖 What is RFM segmentation and how does Pulse compute it?"):
+        st.markdown(f"""
+        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
+          <strong>What it is:</strong><br>
+          RFM is a proven framework for ranking and segmenting customers by
+          three behavioural signals:<br>
+          &nbsp;&nbsp;• <strong>Recency (R)</strong> — How many days since their last purchase?
+            Lower = better. A customer who bought yesterday is more valuable than one who bought a year ago.<br>
+          &nbsp;&nbsp;• <strong>Frequency (F)</strong> — How many times have they purchased?
+            Higher = better. Repeat buyers are more loyal and cost less to retain than acquiring new ones.<br>
+          &nbsp;&nbsp;• <strong>Monetary (M)</strong> — How much have they spent in total?
+            Higher = better. High-value customers deserve different treatment than low-value ones.<br><br>
+
+          <strong>How Pulse computes it:</strong><br>
+          Each dimension is scored 1–4 using quartile binning across all
+          {58987:,} customers. Score 4 = best quartile. The three scores are
+          combined into a segment label using standard RFM rules:<br>
+          &nbsp;&nbsp;• <strong>Champions</strong> — R=4, F≥3: bought recently and often<br>
+          &nbsp;&nbsp;• <strong>Loyal</strong> — R≥3, F≥3: consistent buyers<br>
+          &nbsp;&nbsp;• <strong>At Risk</strong> — R≤2, F≥3: used to buy often, haven't recently<br>
+          &nbsp;&nbsp;• <strong>New</strong> — R=4, F=1: bought recently but only once<br>
+          &nbsp;&nbsp;• <strong>Lost</strong> — R≤2, F≤2: low recency and frequency<br><br>
+
+          <strong>What to look for:</strong><br>
+          &nbsp;&nbsp;• What % of revenue comes from Champions vs Lost?<br>
+          &nbsp;&nbsp;• How large is the At Risk segment? These customers are recoverable.<br>
+          &nbsp;&nbsp;• How large is New? This tells you acquisition volume vs retention.<br><br>
+
+          <strong>Business application:</strong><br>
+          Different segments get different campaigns: Champions get VIP rewards,
+          At Risk get win-back offers, New get onboarding sequences,
+          Lost get high-discount reactivation (or are excluded from spend).
+        </div>""", unsafe_allow_html=True)
+
+    with st.spinner("Computing RFM segments..."):
+        try:
+            from analytics.segmentation import (
+                compute_rfm, segment_summary, rfm_summary_for_ai, SEGMENT_META
+            )
+            rfm_df   = compute_rfm()
+            rfm_sum  = segment_summary(rfm_df)
+            rfm_ai   = rfm_summary_for_ai(rfm_df, rfm_sum)
+
+            # Segment summary cards
+            seg_order = ["Champions","Loyal","At Risk","New","Lost"]
+            rfm_sum_ordered = rfm_sum.set_index("segment").reindex(seg_order).reset_index()
+
+            seg_cols = st.columns(5)
+            for col, (_, row) in zip(seg_cols, rfm_sum_ordered.iterrows()):
+                meta = SEGMENT_META.get(row["segment"], {})
+                color = meta.get("color", CRIMSON)
+                st.markdown(f"""
+                <div class="kpi-card" style="height:auto;padding:0.8rem 0.9rem;
+                     border-top:3px solid {color};">
+                  <div style="font-size:1.1rem;">{meta.get('icon','')}</div>
+                  <div class="kpi-label" style="color:{color};">{row['segment']}</div>
+                  <div class="kpi-value" style="font-size:1.3rem;">
+                    {int(row['customer_count']):,}</div>
+                  <div class="kpi-hint">{row['pct_customers']:.1f}% of customers</div>
+                  <div class="kpi-hint">Avg spend: ${row['avg_monetary']:,.0f}</div>
+                  <div style="font-size:0.65rem;color:{TEXT_LIGHT};margin-top:0.3rem;
+                       line-height:1.4;">{meta.get('desc','')}</div>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+
+            # Scatter: Recency vs Frequency, size = Monetary
+            seg_colors_map = {s: SEGMENT_META[s]["color"] for s in SEGMENT_META}
+            # Sample for performance (max 5000 points)
+            rfm_sample = rfm_df.sample(min(5000, len(rfm_df)), random_state=42)
+
+            fig_rfm = go.Figure()
+            for seg in seg_order:
+                sub = rfm_sample[rfm_sample["segment"] == seg]
+                if sub.empty:
+                    continue
+                fig_rfm.add_trace(go.Scatter(
+                    x=sub["recency"],
+                    y=sub["frequency"],
+                    mode="markers",
+                    name=seg,
+                    marker=dict(
+                        size=np.clip(sub["monetary"]/50, 4, 20),
+                        color=SEGMENT_META[seg]["color"],
+                        opacity=0.55,
+                        line=dict(width=0.5, color=WHITE),
+                    ),
+                    customdata=np.stack([
+                        sub["monetary"].round(0),
+                        sub["r_score"],
+                        sub["f_score"],
+                        sub["m_score"],
+                    ], axis=-1),
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "Recency: %{x} days ago<br>"
+                        "Frequency: %{y} purchases<br>"
+                        "Lifetime value: $%{customdata[0]:,.0f}<br>"
+                        "Scores (R/F/M): %{customdata[1]}/%{customdata[2]}/%{customdata[3]}"
+                        "<extra></extra>"
+                    ),
+                ))
+
+            fig_rfm.update_layout(**_base_layout(
+                height=360,
+                x_title="Recency — Days since last purchase (lower = more recent)",
+                y_title="Frequency — Number of purchases",
+            ))
+            fig_rfm.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                            xanchor="left", x=0)
+            )
+            st.plotly_chart(fig_rfm, use_container_width=True)
+            st.caption("Dot size = lifetime monetary value. Hover over any dot for details.")
+
+            graph_ai_expander("rfm_scatter",
+                f"RFM scatter plot. {rfm_ai['total_customers']:,} customers. "
+                f"Champions: {rfm_ai['champions_pct']:.1f}%. "
+                f"At Risk: {rfm_ai['at_risk_count']:,} customers. "
+                f"Lost: {rfm_ai['lost_pct']:.1f}%.",
+                ai_toggle)
+
+        except Exception as e:
+            st.error(f"Segmentation error: {e}")
+
+    # ── SECTION 3: COHORT RETENTION ────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<div class="section-header">🔁 Cohort Retention Analysis</div>',
+                unsafe_allow_html=True)
+
+    with st.expander("📖 What is cohort retention and how does Pulse compute it?"):
+        st.markdown(f"""
+        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
+          <strong>What it is:</strong><br>
+          A cohort is a group of customers who made their first purchase in the
+          same calendar month. Cohort retention tracks what percentage of each
+          cohort came back and made another purchase in subsequent months.<br><br>
+
+          <strong>Why it matters:</strong><br>
+          Aggregate metrics like "monthly active users" mask whether growth is
+          coming from new customers or retained ones. Cohort analysis separates
+          these signals. If month-1 retention is declining across recent cohorts,
+          your product or post-purchase experience has a problem — even if total
+          revenue looks fine because you're acquiring more new customers.<br><br>
+
+          <strong>How Pulse computes it:</strong><br>
+          &nbsp;&nbsp;• Month 0 = the signup month (acquisition month)<br>
+          &nbsp;&nbsp;• Month 1 = one calendar month after signup, etc.<br>
+          &nbsp;&nbsp;• Each cell = % of that cohort who made at least one purchase that month<br>
+          &nbsp;&nbsp;• Data source: {36} monthly cohorts from Jan 2021 – Dec 2023<br><br>
+
+          <strong>What to look for:</strong><br>
+          &nbsp;&nbsp;• Darker cells = higher retention. Look for rows that stay darker longer.<br>
+          &nbsp;&nbsp;• Do recent cohorts (bottom rows) retain better or worse than older ones?<br>
+          &nbsp;&nbsp;• Is there a consistent drop-off pattern (e.g. month 2 always loses half)?<br>
+          &nbsp;&nbsp;• Are there any cohorts that spike in a specific month (seasonal repurchase)?<br><br>
+
+          <strong>Business application:</strong><br>
+          Retention curves directly inform LTV (lifetime value) calculations,
+          payback period on customer acquisition cost, and whether loyalty
+          programmes or re-engagement campaigns are working.
+        </div>""", unsafe_allow_html=True)
+
+    with st.spinner("Computing cohort retention matrix..."):
+        try:
+            from analytics.cohort import build_cohort_matrix, cohort_summary_for_ai
+
+            ret_pct, cohort_sizes = build_cohort_matrix()
+            cohort_ai = cohort_summary_for_ai(ret_pct, cohort_sizes)
+
+            # Month range slider
+            max_months = ret_pct.shape[1] - 1
+            ch1, ch2 = st.columns([2, 3])
+            with ch1:
+                show_months = st.slider(
+                    "Show months 0 –",
+                    min_value=6, max_value=max_months,
+                    value=min(12, max_months), step=1,
+                )
+
+            # Trim to selected range
+            ret_display = ret_pct[[c for c in ret_pct.columns if c <= show_months]]
+            z_vals = (ret_display.values * 100).round(1)
+
+            # Replace NaN with None for Plotly
+            z_text = []
+            for row in z_vals:
+                z_text.append([f"{v:.0f}%" if not np.isnan(v) else "" for v in row])
+
+            fig_cohort = go.Figure(go.Heatmap(
+                z=z_vals,
+                x=[f"M{c}" for c in ret_display.columns],
+                y=ret_display.index.tolist(),
+                colorscale=[[0,"#F9FAFB"],[0.5,"#FECACA"],[1, CRIMSON]],
+                text=z_text,
+                texttemplate="%{text}",
+                textfont=dict(size=10, color=TEXT_DARK),
+                hovertemplate=(
+                    "Cohort: %{y}<br>"
+                    "Month since signup: %{x}<br>"
+                    "Retention: %{z:.1f}%<extra></extra>"
+                ),
+                showscale=True,
+                colorbar=dict(
+                    title="Retention %",
+                    thickness=14,
+                    ticksuffix="%",
+                    len=0.8,
+                ),
+                zmin=0, zmax=10,
+            ))
+            fig_cohort.update_layout(
+                height=max(420, len(ret_display)*13),
+                paper_bgcolor=WHITE, plot_bgcolor=WHITE,
+                font=dict(family="DM Sans", size=10, color=TEXT_DARK),
+                margin=dict(l=80, r=60, t=36, b=60),
+                xaxis=dict(
+                    title="Months since first purchase",
+                    title_font=dict(size=11, color=TEXT_MID),
+                    side="bottom",
+                ),
+                yaxis=dict(
+                    title="Cohort (acquisition month)",
+                    title_font=dict(size=11, color=TEXT_MID),
+                    autorange="reversed",
+                ),
+            )
+            st.plotly_chart(fig_cohort, use_container_width=True)
+
+            # Retention KPI strip
+            ck1, ck2, ck3, ck4 = st.columns(4)
+            for col, label, val in [
+                (ck1, "Total Cohorts",          f"{cohort_ai['total_cohorts']}"),
+                (ck2, "Avg Month-1 Retention",  f"{cohort_ai['avg_month1_retention']}%"),
+                (ck3, "Avg Month-3 Retention",  f"{cohort_ai['avg_month3_retention']}%"),
+                (ck4, "Avg Month-6 Retention",  f"{cohort_ai['avg_month6_retention']}%"),
+            ]:
+                with col:
+                    st.markdown(f"""
+                    <div class="kpi-card" style="height:auto;padding:0.75rem 0.95rem;">
+                      <div class="kpi-label">{label}</div>
+                      <div class="kpi-value" style="font-size:1.25rem;">{val}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            # Retention curve — average across all cohorts
+            st.markdown('<div class="section-header" style="margin-top:1rem;">'
+                        'Average Retention Curve</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-sub">Average % of customers retained across all cohorts '
+                'by months since first purchase.</div>', unsafe_allow_html=True)
+
+            avg_retention = ret_display.mean(axis=0) * 100
+            fig_curve = go.Figure()
+            fig_curve.add_trace(go.Scatter(
+                x=[f"M{c}" for c in avg_retention.index],
+                y=avg_retention.values,
+                mode="lines+markers",
+                name="Avg Retention",
+                line=dict(color=CRIMSON, width=2.5),
+                marker=dict(size=6, color=CRIMSON),
+                fill="tozeroy",
+                fillcolor="rgba(155,28,28,0.07)",
+            ))
+            fig_curve.update_layout(**_base_layout(
+                height=260,
+                x_title="Months since first purchase",
+                y_title="Avg Retention (%)",
+            ))
+            fig_curve.update_yaxes(ticksuffix="%")
+            st.plotly_chart(fig_curve, use_container_width=True)
+
+            graph_ai_expander("cohort",
+                f"Cohort retention. {cohort_ai['total_cohorts']} monthly cohorts. "
+                f"Avg month-1 retention: {cohort_ai['avg_month1_retention']}%. "
+                f"Avg month-3: {cohort_ai['avg_month3_retention']}%. "
+                f"Avg month-6: {cohort_ai['avg_month6_retention']}%. "
+                f"58% of customers only purchase once (low repeat rate is key finding).",
+                ai_toggle)
+
+        except Exception as e:
+            st.error(f"Cohort analysis error: {e}")
