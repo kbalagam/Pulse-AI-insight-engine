@@ -139,21 +139,80 @@ if generate_clicked:
     report_key = f"report_{report_type}_{report_date}_{days}"
     with st.spinner("Generating report..."):
         try:
-            is_weekly = report_type == "Weekly summary report"
-            top_prod_list = top_prod.to_dict("records") if not top_prod.empty else []
+            # Pass DataFrame directly — generate_report uses itertuples internally
+            top_prod_df = top_prod if not top_prod.empty else pd.DataFrame()
 
+            # ── Generate AI strings if key is available ────────────────────
+            ai_narrative           = None
+            ai_anomaly_explanation = None
+            ai_recommendations     = None
+
+            if has_key:
+                try:
+                    from ai.gemini import (
+                        generate_daily_narrative,
+                        generate_anomaly_explanation,
+                        generate_recommendations,
+                        generate_weekly_report_narrative,
+                    )
+
+                    is_weekly = report_type == "Weekly summary report"
+
+                    if is_weekly:
+                        top_prod_list = (
+                            top_prod.to_dict("records")
+                            if not top_prod.empty else []
+                        )
+                        ai_narrative = generate_weekly_report_narrative(
+                            insights=insights,
+                            period_summary=period,
+                            top_products=top_prod_list,
+                        )
+                    else:
+                        ai_narrative = generate_daily_narrative(
+                            insights=insights,
+                            period_summary=period,
+                            date_label=f"the last {days} days",
+                        )
+
+                    # Use most recent anomaly for deep-dive explanation
+                    if not recent_anom.empty:
+                        top_anom = recent_anom.iloc[0]
+                        ai_anomaly_explanation = generate_anomaly_explanation(
+                            metric=top_anom["metric"],
+                            direction=top_anom.get("direction", ""),
+                            deviation_pct=top_anom.get("deviation_pct", 0),
+                            anomaly_type=top_anom.get("anomaly_type", ""),
+                            period_summary=period,
+                        )
+
+                    ai_recommendations = generate_recommendations(
+                        insights=insights,
+                        channel_summary=ch_sum,
+                        period_summary=period,
+                    )
+
+                except Exception as ai_err:
+                    st.warning(f"AI generation partial failure: {ai_err}")
+
+            # ── Assemble report ────────────────────────────────────────────
             report_text = generate_report(
                 period_summary=period,
+                insights=insights,
                 anomalies=recent_anom,
                 channel_summary=ch_sum,
-                top_products=top_prod_list,
-                insights=insights,
+                top_products=top_prod_df,
                 report_date=report_date,
-                weekly=is_weekly,
+                ai_narrative=ai_narrative,
+                ai_anomaly_explanation=ai_anomaly_explanation,
+                ai_recommendations=ai_recommendations,
+                save=False,
             )
-            st.session_state[report_key]         = report_text
-            st.session_state["active_report_key"] = report_key
+
+            st.session_state[report_key]          = report_text
+            st.session_state["active_report_key"]  = report_key
             st.session_state["active_report_type"] = report_type
+
         except Exception as e:
             st.error(f"Report generation failed: {e}")
 
@@ -174,7 +233,6 @@ if active_key and active_key in st.session_state:
     prev_l, prev_r = st.columns([2.2, 1], gap="small")
 
     with prev_l:
-        # ── Rendered preview ──────────────────────────────────────────────────
         sections = report_text.strip().split("\n\n")
 
         for block in sections:
@@ -187,12 +245,13 @@ if active_key and active_key in st.session_state:
             # Separator lines
             if set(first) == {"-"} and len(first) > 10:
                 st.markdown(
-                    "<hr style='border:none; border-top:0.5px solid #E5E7EB; margin:0.5rem 0;'>",
+                    "<hr style='border:none; border-top:0.5px solid #E5E7EB;"
+                    " margin:0.5rem 0;'>",
                     unsafe_allow_html=True,
                 )
                 continue
 
-            # Section headings (all caps lines)
+            # Section headings — all caps
             if first.isupper() and len(first) > 3 and not first.startswith(" "):
                 st.markdown(
                     f"<div style='font-size:0.72rem; font-weight:600; "
@@ -205,11 +264,11 @@ if active_key and active_key in st.session_state:
             else:
                 body_lines = lines
 
-            # Body lines
             for line in body_lines:
                 line = line.strip()
                 if not line:
                     continue
+
                 # Numbered list items
                 if len(line) > 2 and line[0].isdigit() and line[1] in ".):":
                     st.markdown(
@@ -219,6 +278,7 @@ if active_key and active_key in st.session_state:
                         f"{line}</div>",
                         unsafe_allow_html=True,
                     )
+
                 # Key: value lines
                 elif ":" in line and len(line.split(":")[0]) < 30:
                     parts = line.split(":", 1)
@@ -229,6 +289,21 @@ if active_key and active_key in st.session_state:
                         f"{parts[0]}:</span>{parts[1]}</div>",
                         unsafe_allow_html=True,
                     )
+
+                # Anomaly flags — lines starting with [
+                elif line.startswith("["):
+                    is_up   = "[UP]" in line
+                    is_down = "[DOWN]" in line
+                    color   = "#15803D" if is_up else "#B91C1C" if is_down else "#92400E"
+                    bg      = "#DCFCE7" if is_up else "#FEE2E2" if is_down else "#FEF3C7"
+                    st.markdown(
+                        f"<div style='font-size:0.78rem; color:{color}; "
+                        f"background:{bg}; border-radius:6px; "
+                        f"padding:0.3rem 0.7rem; margin-bottom:0.25rem; "
+                        f"line-height:1.6;'>{line}</div>",
+                        unsafe_allow_html=True,
+                    )
+
                 # Regular prose
                 else:
                     st.markdown(
@@ -294,9 +369,9 @@ if active_key and active_key in st.session_state:
         """, unsafe_allow_html=True)
 
         # ── AI status card ────────────────────────────────────────────────────
-        ai_status  = "Enabled" if has_key else "Disabled"
-        ai_color   = "#15803D" if has_key else "#9CA3AF"
-        ai_bg      = "#DCFCE7" if has_key else "#F3F4F6"
+        ai_status = "Enabled" if has_key else "Disabled"
+        ai_color  = "#15803D" if has_key else "#9CA3AF"
+        ai_bg     = "#DCFCE7" if has_key else "#F3F4F6"
 
         st.markdown(f"""
         <div style="background:#FFFFFF; border:0.5px solid #E5E7EB;
@@ -320,9 +395,7 @@ if active_key and active_key in st.session_state:
         """, unsafe_allow_html=True)
 
         # ── Download button ───────────────────────────────────────────────────
-        file_name = (
-            f"pulse_report_{report_date.strftime('%Y-%m-%d')}.txt"
-        )
+        file_name = f"pulse_report_{report_date.strftime('%Y-%m-%d')}.txt"
         st.download_button(
             label="Download report (.txt)",
             data=report_text,
