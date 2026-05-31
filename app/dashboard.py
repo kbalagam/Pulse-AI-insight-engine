@@ -1,32 +1,16 @@
 """
-Pulse — AI-powered insight engine.
-DM Sans font, consistent KPI tiles, always-visible AI expanders,
-no funnel, fixed chart margins, consistent product layout, top-N filter.
+Pulse — AI Insight Engine
+Entry point and shared configuration.
+Run with: streamlit run app/dashboard.py
 """
 
 import os
 import sys
-import textwrap
-import requests
-from pathlib import Path
-from datetime import date, timedelta
-
 import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-
-from analytics.metrics import (
-    load_daily_metrics, load_channel_metrics, load_product_sales,
-    enrich_daily_metrics, compute_period_summary,
-    compute_top_products, compute_channel_summary,
-)
-from analytics.anomaly import detect_all_anomalies, get_recent_anomalies
-from analytics.insights import compile_all_insights
-from reports.daily_report import generate_report
 
 st.set_page_config(
     page_title="Pulse — AI Insight Engine",
@@ -35,1840 +19,541 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ---------------------------------------------------------------------------
-# Tokens
-# ---------------------------------------------------------------------------
-
-CRIMSON      = "#9B1C1C"
-CRIMSON_DEEP = "#7F1D1D"
-RED_ACCENT   = "#DC2626"
-RED_LIGHT    = "#FEF2F2"
-CHARCOAL     = "#1C1C1C"
-CHARCOAL_MID = "#374151"
-GRAY         = "#6B7280"
-GRAY_LIGHT   = "#F3F4F6"
-BORDER       = "#E5E7EB"
-WHITE        = "#FFFFFF"
-BG           = "#F9FAFB"
-TEXT_DARK    = "#111827"
-TEXT_MID     = "#6B7280"
-TEXT_LIGHT   = "#9CA3AF"
-GREEN        = "#16A34A"
-GREEN_LIGHT  = "#DCFCE7"
-AMBER        = "#D97706"
-AMBER_LIGHT  = "#FEF3C7"
-BLUE         = "#1D4ED8"
-
-st.markdown(f"""
+st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
 
-html, body, [class*="css"], button, input, textarea, select, p, div, span, label {{
-  font-family: 'DM Sans', sans-serif !important;
-}}
+html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif !important;
+}
+
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 100% !important;
+}
 
 /* ── Sidebar ── */
-section[data-testid="stSidebar"] {{
-  background: {CHARCOAL} !important;
-}}
-section[data-testid="stSidebar"] > div {{
-  background: {CHARCOAL} !important;
-}}
-section[data-testid="stSidebar"] * {{
-  color: #E5E7EB !important;
-}}
-section[data-testid="stSidebar"] .stTextInput input,
+section[data-testid="stSidebar"] {
+    background: #111827 !important;
+    border-right: 1px solid rgba(255,255,255,0.06) !important;
+}
+section[data-testid="stSidebar"] > div {
+    background: #111827 !important;
+}
+section[data-testid="stSidebar"] * {
+    color: #D1D5DB !important;
+}
 section[data-testid="stSidebar"] .stSelectbox > div,
-section[data-testid="stSidebar"] .stDateInput input,
-section[data-testid="stSidebar"] .stTextArea textarea {{
-  background: rgba(255,255,255,0.1) !important;
-  border: 1px solid rgba(255,255,255,0.2) !important;
-  border-radius: 7px !important;
-  color: #F9FAFB !important;
-}}
-section[data-testid="stSidebar"] label {{
-  color: #D1D5DB !important;
-  font-size: 0.72rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.07em !important;
-}}
-section[data-testid="stSidebar"] hr {{
-  border-color: rgba(255,255,255,0.12) !important;
-}}
-section[data-testid="stSidebar"] .stButton > button {{
-  background: {CRIMSON} !important;
-  color: white !important;
-  border: none !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
-}}
+section[data-testid="stSidebar"] .stTextInput input {
+    background: rgba(255,255,255,0.07) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 8px !important;
+    color: #F9FAFB !important;
+    font-size: 0.8rem !important;
+}
+section[data-testid="stSidebar"] label {
+    color: #9CA3AF !important;
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.07em !important;
+}
+section[data-testid="stSidebar"] hr {
+    border-color: rgba(255,255,255,0.08) !important;
+    margin: 0.6rem 0 !important;
+}
+section[data-testid="stSidebar"] .stButton > button {
+    background: #1D4ED8 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    width: 100% !important;
+    padding: 0.5rem !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: #1E40AF !important;
+}
 
-/* ── KPI cards — fixed height so all tiles are uniform ── */
-.kpi-card {{
-  background: {WHITE};
-  border-radius: 12px;
-  padding: 1rem 1.1rem 0.9rem 1.1rem;
-  border: 1px solid {BORDER};
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  height: 150px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-sizing: border-box;
-  margin-bottom: 0.5rem;
-}}
-.kpi-icon  {{ font-size: 1.1rem; line-height: 1; }}
-.kpi-label {{
-  font-size: 0.67rem; color: {TEXT_MID}; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.2rem;
-}}
-.kpi-value {{
-  font-size: 1.5rem; font-weight: 700; color: {TEXT_DARK}; line-height: 1.15;
-}}
-.kpi-bottom {{ display: flex; flex-direction: column; gap: 0.15rem; }}
-.kpi-delta-up   {{ display:inline-block; font-size:0.68rem; font-weight:600; color:{GREEN};      background:{GREEN_LIGHT};  padding:2px 7px; border-radius:20px; }}
-.kpi-delta-down {{ display:inline-block; font-size:0.68rem; font-weight:600; color:{RED_ACCENT}; background:{RED_LIGHT};    padding:2px 7px; border-radius:20px; }}
-.kpi-delta-neu  {{ display:inline-block; font-size:0.68rem; font-weight:600; color:{GRAY};       background:{GRAY_LIGHT};   padding:2px 7px; border-radius:20px; }}
-.kpi-hint {{ font-size: 0.65rem; color: {TEXT_LIGHT}; }}
+/* ── Sidebar nav ── */
+section[data-testid="stSidebarNav"] {
+    padding-top: 0 !important;
+}
+section[data-testid="stSidebarNav"] a {
+    font-size: 0.82rem !important;
+    font-weight: 400 !important;
+    color: #9CA3AF !important;
+    padding: 0.4rem 0.8rem !important;
+    border-radius: 6px !important;
+}
+section[data-testid="stSidebarNav"] a:hover {
+    background: rgba(255,255,255,0.06) !important;
+    color: #F9FAFB !important;
+}
+section[data-testid="stSidebarNav"] a[aria-selected="true"] {
+    background: rgba(255,255,255,0.1) !important;
+    color: #F9FAFB !important;
+    font-weight: 500 !important;
+}
 
-/* ── Section ── */
-.section-header {{ font-size:0.94rem; font-weight:700; color:{TEXT_DARK}; margin:1.1rem 0 0.2rem 0; }}
-.section-sub    {{ font-size:0.76rem; color:{TEXT_MID}; margin-bottom:0.55rem; }}
+/* ── KPI cards ── */
+.kpi-card {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 130px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.kpi-label {
+    font-size: clamp(0.58rem, 0.9vw, 0.65rem);
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.kpi-value {
+    font-size: clamp(1.1rem, 2vw, 1.45rem);
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.2;
+}
+.kpi-delta-up {
+    display: inline-block;
+    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
+    font-weight: 600;
+    color: #15803D;
+    background: #DCFCE7;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+.kpi-delta-down {
+    display: inline-block;
+    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
+    font-weight: 600;
+    color: #B91C1C;
+    background: #FEE2E2;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+.kpi-delta-neu {
+    display: inline-block;
+    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
+    font-weight: 600;
+    color: #6B7280;
+    background: #F3F4F6;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+.kpi-hint {
+    font-size: clamp(0.58rem, 0.8vw, 0.63rem);
+    color: #9CA3AF;
+    margin-top: 2px;
+}
 
-/* ── AI ── */
-.ai-box {{
-  background:{WHITE}; border:1px solid {BORDER};
-  border-left:4px solid {CRIMSON}; border-radius:10px;
-  padding:0.9rem 1.1rem; line-height:1.7;
-  color:{TEXT_DARK}; font-size:0.85rem; margin:0.4rem 0 0.7rem 0;
-}}
-.ai-placeholder {{
-  background:{GRAY_LIGHT}; border:1.5px dashed {BORDER};
-  border-radius:10px; padding:0.8rem 1rem;
-  color:{TEXT_MID}; font-size:0.81rem;
-  margin:0.4rem 0 0.6rem 0; text-align:center; line-height:1.6;
-}}
+/* ── Section headers ── */
+.section-header {
+    font-size: clamp(0.68rem, 1vw, 0.75rem);
+    font-weight: 600;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding-bottom: 0.5rem;
+    border-bottom: 0.5px solid #E5E7EB;
+    margin-bottom: 0.8rem;
+    margin-top: 0.5rem;
+}
 
-/* ── Insight cards ── */
-.insight-card {{
-  background:{WHITE}; border-radius:10px; padding:0.72rem 0.9rem;
-  border:1px solid {BORDER}; margin-bottom:0.38rem;
-  border-left:4px solid {CRIMSON};
-}}
-.insight-high   {{ border-left-color:{RED_ACCENT}; }}
-.insight-medium {{ border-left-color:{AMBER}; }}
-.insight-low    {{ border-left-color:{GREEN}; }}
-.badge {{ display:inline-block; font-size:0.61rem; font-weight:700; padding:2px 6px; border-radius:20px; text-transform:uppercase; letter-spacing:0.05em; margin-right:4px; }}
-.badge-high   {{ background:{RED_LIGHT};   color:{RED_ACCENT}; }}
-.badge-medium {{ background:{AMBER_LIGHT}; color:{AMBER}; }}
-.badge-low    {{ background:{GREEN_LIGHT}; color:{GREEN}; }}
+/* ── Page title ── */
+.page-title {
+    font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.15rem;
+}
+.page-sub {
+    font-size: clamp(0.7rem, 1.2vw, 0.78rem);
+    color: #9CA3AF;
+    margin-bottom: 1.2rem;
+}
 
-/* ── Anomaly stat cards ── */
-.anomaly-stat-card {{
-  background:{WHITE}; border-radius:12px; padding:0.85rem 0.95rem;
-  border:1px solid {BORDER}; text-align:center;
-}}
-.anom-val   {{ font-size:1.65rem; font-weight:700; }}
-.anom-label {{ font-size:0.71rem; color:{TEXT_MID}; margin-top:0.12rem; }}
+/* ── AI strip ── */
+.ai-strip {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-left: 3px solid #1D4ED8;
+    border-radius: 0 10px 10px 0;
+    padding: 0.85rem 1.1rem;
+    font-size: clamp(0.75rem, 1.2vw, 0.83rem);
+    color: #374151;
+    line-height: 1.7;
+    margin-bottom: 1.2rem;
+}
+.ai-strip-label {
+    font-size: clamp(0.58rem, 0.9vw, 0.62rem);
+    font-weight: 600;
+    color: #1D4ED8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.3rem;
+}
+.ai-placeholder {
+    background: #F9FAFB;
+    border: 1px dashed #E5E7EB;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
+    color: #9CA3AF;
+    margin-bottom: 1.2rem;
+    text-align: center;
+}
 
-/* ── Callout ── */
-.callout {{
-  background:{RED_LIGHT}; border-radius:10px; padding:0.72rem 0.95rem;
-  font-size:0.81rem; color:{CRIMSON_DEEP}; margin-bottom:0.7rem;
-  border:1px solid #FECACA;
-}}
+/* ── Chart card ── */
+.chart-card {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 1rem 1.1rem 0.5rem;
+}
+.chart-title {
+    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.15rem;
+}
+.chart-sub {
+    font-size: clamp(0.65rem, 1vw, 0.72rem);
+    color: #9CA3AF;
+    margin-bottom: 0.6rem;
+}
 
-/* ── Hero ── */
-.hero {{
-  background:linear-gradient(135deg,{CRIMSON_DEEP} 0%,{CHARCOAL} 100%);
-  border-radius:14px; padding:1.3rem 1.6rem; color:white; margin-bottom:1rem;
-}}
-.hero-title {{ font-size:1.2rem; font-weight:700; }}
-.hero-sub   {{ font-size:0.78rem; opacity:0.7; margin-top:0.1rem; }}
-.hero-stats {{ display:flex; gap:2rem; margin-top:0.75rem; flex-wrap:wrap; }}
-.hero-stat-val   {{ font-size:1.1rem; font-weight:700; }}
-.hero-stat-label {{ font-size:0.63rem; opacity:0.62; text-transform:uppercase; letter-spacing:0.05em; }}
+/* ── AI insight expander ── */
+.ai-insight-box {
+    background: #F8FAFF;
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
+    color: #374151;
+    line-height: 1.65;
+    margin-top: 0.3rem;
+}
 
-/* ── Tabs ── */
-.stTabs [data-baseweb="tab-list"] {{
-  gap:3px; background:{WHITE}; border-radius:9px;
-  padding:3px; border:1px solid {BORDER}; margin-bottom:0.75rem;
-}}
-.stTabs [data-baseweb="tab"] {{
-  border-radius:6px; font-size:0.77rem; font-weight:600;
-  color:{GRAY}; padding:5px 11px;
-}}
-.stTabs [aria-selected="true"] {{
-  background:{CRIMSON} !important; color:white !important;
-}}
+/* ── Tables ── */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
+}
+.data-table th {
+    font-size: clamp(0.58rem, 0.9vw, 0.63rem);
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 0 0 0.5rem;
+    border-bottom: 0.5px solid #E5E7EB;
+    text-align: left;
+}
+.data-table th.right, .data-table td.right {
+    text-align: right;
+}
+.data-table td {
+    padding: 0.5rem 0;
+    color: #374151;
+    border-bottom: 0.5px solid #F3F4F6;
+}
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+.td-good { color: #15803D; font-weight: 500; }
+.td-bad  { color: #B91C1C; font-weight: 500; }
+.td-bold { font-weight: 500; color: #111827; }
 
-/* ── Buttons ── */
-.stButton > button {{
-  background:{CRIMSON}; color:white; border:none;
-  border-radius:8px; font-weight:600; transition:opacity 0.2s;
-}}
-.stButton > button:hover {{ opacity:0.84; }}
+/* ── Badges ── */
+.badge-up   { background:#DCFCE7; color:#15803D; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.badge-down { background:#FEE2E2; color:#B91C1C; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.badge-warn { background:#FEF3C7; color:#92400E; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.badge-neu  { background:#F3F4F6; color:#6B7280; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
 
-/* ── Product tile ── */
-.prod-tile {{
-  background:{WHITE}; border-radius:9px;
-  padding:0.6rem 0.85rem; border:1px solid {BORDER};
-  margin-bottom:0.32rem; box-shadow:0 1px 2px rgba(0,0,0,0.03);
-}}
+/* ── Home page specific ── */
+.home-hero-title {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.3;
+    margin-bottom: 0.6rem;
+}
+.home-hero-body {
+    font-size: clamp(0.8rem, 1.3vw, 0.92rem);
+    color: #6B7280;
+    line-height: 1.75;
+    max-width: 680px;
+}
+.home-section-tag {
+    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding-bottom: 0.5rem;
+    border-bottom: 0.5px solid #E5E7EB;
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+}
+.q-card {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+}
+.q-num {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+}
+.q-question {
+    font-size: clamp(0.78rem, 1.2vw, 0.88rem);
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.4;
+    margin-bottom: 0.4rem;
+}
+.q-answer {
+    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
+    color: #6B7280;
+    line-height: 1.6;
+}
+.wf-card {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+}
+.wf-step-num {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.35rem;
+}
+.wf-step-title {
+    font-size: clamp(0.78rem, 1.2vw, 0.86rem);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+.wf-step-desc {
+    font-size: clamp(0.68rem, 1vw, 0.76rem);
+    color: #6B7280;
+    line-height: 1.6;
+    margin-bottom: 0.6rem;
+}
+.wf-file {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-family: 'Courier New', monospace;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: #F3F4F6;
+    color: #374151;
+    border: 0.5px solid #E5E7EB;
+}
+.arch-card {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+}
+.arch-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    margin-bottom: 0.6rem;
+}
+.arch-title {
+    font-size: clamp(0.78rem, 1.2vw, 0.86rem);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 0.4rem;
+}
+.arch-desc {
+    font-size: clamp(0.68rem, 1vw, 0.76rem);
+    color: #6B7280;
+    line-height: 1.65;
+    margin-bottom: 0.6rem;
+}
+.arch-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.arch-file {
+    font-size: 0.65rem;
+    font-family: 'Courier New', monospace;
+    padding: 2px 7px;
+    border-radius: 5px;
+    background: #F3F4F6;
+    color: #374151;
+    border: 0.5px solid #E5E7EB;
+}
+.stack-cell {
+    background: #FFFFFF;
+    border: 0.5px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    text-align: center;
+}
+.stack-layer {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.25rem;
+}
+.stack-tool {
+    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
+    font-weight: 600;
+    color: #111827;
+}
+.home-note {
+    font-size: clamp(0.68rem, 1vw, 0.76rem);
+    color: #9CA3AF;
+    line-height: 1.65;
+    font-style: italic;
+    margin-top: 0.75rem;
+}
 
-/* ── Landing ── */
-.landing-hero {{
-  background:linear-gradient(135deg,{CRIMSON_DEEP} 0%,{CHARCOAL} 100%);
-  border-radius:16px; padding:2.2rem 1.8rem; color:white;
-  margin-bottom:1.6rem; text-align:center;
-}}
-.landing-title {{ font-size:2.2rem; font-weight:700; margin-bottom:0.35rem; }}
-.landing-tag   {{ font-size:0.92rem; opacity:0.72; margin-bottom:1rem; }}
-.vs-row {{ display:flex; gap:0.55rem; padding:0.45rem 0; border-bottom:1px solid {BORDER}; font-size:0.8rem; }}
-.vs-bad  {{ color:{RED_ACCENT}; flex:1; }}
-.vs-good {{ color:{GREEN}; flex:1; }}
+/* ── Anomaly master-detail ── */
+.anomaly-log-item {
+    padding: 0.7rem 0.9rem;
+    border-bottom: 0.5px solid #F3F4F6;
+    cursor: pointer;
+    border-radius: 8px;
+    margin-bottom: 2px;
+}
+.anomaly-log-item:hover {
+    background: #F9FAFB;
+}
+.anomaly-log-metric {
+    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 2px;
+}
+.anomaly-log-date {
+    font-size: clamp(0.62rem, 0.9vw, 0.68rem);
+    color: #9CA3AF;
+}
+.anomaly-log-type {
+    font-size: clamp(0.62rem, 0.9vw, 0.68rem);
+    color: #6B7280;
+    margin-top: 2px;
+}
 
-.block-container {{ padding-top:1rem; }}
-.stDataFrame {{ border-radius:9px; overflow:hidden; }}
+/* ── Responsive breakpoints ── */
+@media (max-width: 1280px) {
+    .kpi-card { height: 120px !important; padding: 0.85rem 1rem !important; }
+    .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+}
+@media (max-width: 1024px) {
+    .kpi-card { height: 115px !important; }
+    .home-hero-title { font-size: 1.5rem !important; }
+    .arch-desc { font-size: 0.72rem !important; }
+}
+@media (max-width: 900px) {
+    .kpi-card { height: auto !important; min-height: 100px; }
+    .kpi-value { font-size: 1.1rem !important; }
+    .page-title { font-size: 1.1rem !important; }
+    .home-hero-title { font-size: 1.3rem !important; }
+    .ai-strip { font-size: 0.75rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-KPI_META = {
-    "revenue":         {"label":"revenue",        "icon":"💰","hint":"Total sales per day",                        "fmt":lambda v:f"${v:,.0f}",   "good":"up"},
-    "orders":          {"label":"orders",          "icon":"🛍️","hint":"Number of purchases made",                 "fmt":lambda v:f"{v:,.0f}",     "good":"up"},
-    "aov":             {"label":"aov",             "icon":"🧾","hint":"Average spend per order",                  "fmt":lambda v:f"${v:,.2f}",    "good":"up"},
-    "conversion_rate": {"label":"conversion_rate", "icon":"🎯","hint":"% of clicks resulting in a purchase",     "fmt":lambda v:f"{v*100:.2f}%", "good":"up"},
-    "roas":            {"label":"roas",            "icon":"📣","hint":"Revenue per $1 of ad spend",              "fmt":lambda v:f"{v:.2f}x",     "good":"up"},
-    "spend":           {"label":"spend",           "icon":"💸","hint":"Daily marketing spend",                   "fmt":lambda v:f"${v:,.0f}",    "good":"neutral"},
-}
-
-METRIC_LABELS = {
-    "revenue":"Revenue","orders":"Orders","aov":"AOV",
-    "conversion_rate":"Conversion Rate","cac":"CAC","roas":"ROAS","spend":"Spend",
-}
-
-CHANNEL_COLORS = {
-    "Paid Search":CRIMSON,"Social":CHARCOAL_MID,"Email":GRAY,
-    "Affiliate":GREEN,"Display":AMBER,"Organic / Direct":BLUE,
-}
-CATEGORY_COLORS = {
-    "Electronics":CRIMSON,"Fashion":CHARCOAL_MID,"Sports":GREEN,
-    "Home":AMBER,"Beauty":RED_ACCENT,"Grocery":BLUE,
-}
-CATEGORY_ICONS = {
-    "Electronics":"💻","Fashion":"👗","Sports":"🏃",
-    "Home":"🏠","Beauty":"✨","Grocery":"🛒",
-}
-ANOMALY_METRIC_COLORS = {
-    "revenue":CRIMSON,"orders":CHARCOAL_MID,"aov":AMBER,
-    "conversion_rate":GREEN,"cac":RED_ACCENT,"roas":BLUE,"spend":GRAY,
-}
-
-# ---------------------------------------------------------------------------
-# Chart layout — generous margins prevent cropping
-# ---------------------------------------------------------------------------
-
-def _base_layout(height=320, x_title="", y_title=""):
-    return dict(
-        height=height,
-        paper_bgcolor=WHITE, plot_bgcolor=WHITE,
-        font=dict(color=TEXT_DARK, family="DM Sans", size=11),
-        xaxis=dict(
-            title=x_title, gridcolor=GRAY_LIGHT, showgrid=True,
-            zeroline=False, linecolor=BORDER, automargin=True,
-            title_font=dict(size=11, color=TEXT_MID),
-        ),
-        yaxis=dict(
-            title=y_title, gridcolor=GRAY_LIGHT, showgrid=True,
-            zeroline=False, linecolor=BORDER, automargin=True,
-            title_font=dict(size=11, color=TEXT_MID),
-        ),
-        margin=dict(l=64, r=36, t=36, b=64),
-        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
-        hoverlabel=dict(bgcolor=WHITE, bordercolor=BORDER, font=dict(family="DM Sans")),
-    )
-
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
-@st.cache_data(show_spinner="Loading data...")
-def load_and_enrich():
-    df   = load_daily_metrics()
-    df   = enrich_daily_metrics(df)
-    ch   = load_channel_metrics()
-    prod = load_product_sales()
-    return df, ch, prod
-
-@st.cache_data(show_spinner="Running anomaly detection...")
-def get_all_anomalies(_df):
-    return detect_all_anomalies(_df)
-
-# ---------------------------------------------------------------------------
-# Gemini helpers
-# ---------------------------------------------------------------------------
-
-def _api_key():
-    return os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
-
-def _has_key():
-    return bool(_api_key())
-
-def _gemini_post(prompt: str, max_tokens: int = 400) -> str:
-    key = _api_key()
-    if not key:
-        return ""
-    url = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
-    try:
-        r = requests.post(
-            f"{url}?key={key}",
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": max_tokens},
-            },
-            timeout=30,
-        )
-        if r.status_code == 200:
-            return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        return f"API error {r.status_code}"
-    except Exception as e:
-        return f"Error: {e}"
-
-def call_gemini(fn: str, *args, **kwargs):
-    if not _has_key():
-        return None
-    os.environ["GEMINI_API_KEY"] = _api_key()
-    try:
-        from ai.gemini import (
-            generate_daily_narrative, generate_anomaly_explanation,
-            generate_recommendations, generate_weekly_report_narrative,
-        )
-        fmap = {
-            "narrative":       generate_daily_narrative,
-            "anomaly":         generate_anomaly_explanation,
-            "recommendations": generate_recommendations,
-            "weekly":          generate_weekly_report_narrative,
-        }
-        return fmap[fn](*args, **kwargs)
-    except Exception as e:
-        st.warning(f"AI unavailable: {e}")
-        return None
-
-def ai_placeholder(message: str = "AI Insight available"):
-    st.markdown(f"""
-    <div class="ai-placeholder">
-      🔒 <strong>{message}</strong><br>
-      <span style="font-size:0.75rem;">
-        Add your free Gemini API key in the sidebar to unlock this.
-        Get one at <a href="https://aistudio.google.com" target="_blank"
-        style="color:{CRIMSON};">aistudio.google.com</a>.
-      </span>
-    </div>""", unsafe_allow_html=True)
-
-def graph_ai_expander(graph_id: str, context: str, ai_on: bool):
-    """Always visible below every chart regardless of key or toggle state."""
-    with st.expander("🤖 AI Insight for this chart"):
-        if not _has_key():
-            ai_placeholder("Add your Gemini API key to generate insight for this chart")
-            return
-        if not ai_on:
-            st.markdown(f"""
-            <div class="ai-placeholder">
-              💡 <strong>AI Insights are ready for this chart.</strong><br>
-              <span style="font-size:0.75rem;">
-                Turn on <strong>"Show AI Insights on graphs"</strong> in the sidebar,
-                then click Generate.
-              </span>
-            </div>""", unsafe_allow_html=True)
-            return
-        btn_k = f"ai_btn_{graph_id}"
-        res_k = f"ai_res_{graph_id}"
-        if st.button("Generate Insight", key=btn_k):
-            with st.spinner("Analysing..."):
-                result = _gemini_post(
-                    "You are a business analyst. Give 2-3 concise actionable "
-                    "observations about this chart in plain English. No bullet points. "
-                    f"Do not start with 'I'.\n\nChart context: {context}",
-                    max_tokens=300,
-                )
-            st.session_state[res_k] = result
-        if res_k in st.session_state:
-            st.markdown(f'<div class="ai-box">{st.session_state[res_k]}</div>',
-                        unsafe_allow_html=True)
-        else:
-            st.caption("Click Generate Insight to analyse this chart.")
-
-# ---------------------------------------------------------------------------
-# Session state init
-# ---------------------------------------------------------------------------
-
-if "show_landing" not in st.session_state:
-    st.session_state["show_landing"] = True
-
-# ---------------------------------------------------------------------------
-# LANDING PAGE
-# ---------------------------------------------------------------------------
-
-if st.session_state["show_landing"]:
-    st.markdown(f"""
-    <div class="landing-hero">
-      <div class="landing-title">⚡ Pulse</div>
-      <div class="landing-tag">AI-Powered Insight Engine for Any Data-Driven Domain</div>
-      <div style="font-size:0.84rem;opacity:0.68;max-width:540px;margin:0 auto;">
-        Pulse automatically analyses your business data, detects anomalies,
-        and delivers plain-English recommendations — no analyst required.
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-    lc1, lc2 = st.columns(2)
-    with lc1:
-        st.markdown("### What Pulse Does")
-        st.markdown(f"""
-        <div style="background:{WHITE};border-radius:12px;padding:1rem;border:1px solid {BORDER};margin-bottom:0.8rem;">
-          <div style="font-size:0.84rem;color:{TEXT_DARK};line-height:1.7;">
-            Built for <strong>executives, analysts, and domain leads</strong>
-            who need fast, clear answers from their data.<br><br>
-            Pulse automatically:
-            <ul style="margin:0.4rem 0 0 1rem;color:{TEXT_MID};font-size:0.81rem;">
-              <li>Detects meaningful metric changes and anomalies</li>
-              <li>Ranks findings by business impact</li>
-              <li>Generates plain-English explanations and recommendations</li>
-              <li>Exports shareable daily insight reports</li>
-            </ul>
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-        st.markdown("### Who It's For")
-        for icon, role, desc in [
-            ("📊","Revenue & Finance","Daily revenue, AOV, order trends, ROAS"),
-            ("📣","Marketing Teams","Channel ROI, CAC, campaign anomalies"),
-            ("📦","Product Managers","Category shifts, top products, units sold"),
-            ("🏢","Executives","High-level summaries and daily reports"),
-            ("🔬","Data Scientists","Anomaly detection, trend signals, deep analytics"),
-        ]:
-            st.markdown(f"""
-            <div style="display:flex;gap:0.55rem;align-items:flex-start;
-                 padding:0.42rem 0;border-bottom:1px solid {BORDER};">
-              <div style="font-size:0.95rem;">{icon}</div>
-              <div>
-                <div style="font-weight:600;font-size:0.81rem;">{role}</div>
-                <div style="font-size:0.74rem;color:{TEXT_MID};">{desc}</div>
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-    with lc2:
-        st.markdown("### AI Features")
-        for icon, title, desc in [
-            ("✨","Daily Narrative","Executive summary of performance in plain English."),
-            ("🚨","Anomaly Explanations","When a metric spikes or drops, Pulse explains why and what to do."),
-            ("💡","Recommendations","3–5 prioritised, specific actions ranked by revenue impact."),
-            ("📊","Per-Graph Insights","Every chart has an AI Insight button for targeted analysis."),
-            ("💬","Ask Anything","Type any question and get a direct, data-grounded answer."),
-            ("📄","AI Reports","Full written reports with AI narratives — ready to share."),
-        ]:
-            st.markdown(f"""
-            <div style="display:flex;gap:0.55rem;align-items:flex-start;
-                 padding:0.47rem 0;border-bottom:1px solid {BORDER};">
-              <div style="font-size:0.95rem;min-width:1.3rem;">{icon}</div>
-              <div>
-                <div style="font-weight:600;font-size:0.81rem;">{title}</div>
-                <div style="font-size:0.74rem;color:{TEXT_MID};line-height:1.5;">{desc}</div>
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-        st.markdown("### Pulse vs Static Dashboards")
-        for bad, good in [
-            ("❌ Shows numbers, no explanation","✅ Explains what changed and why"),
-            ("❌ Analyst needed to find anomalies","✅ Anomalies detected automatically"),
-            ("❌ Hours to build a report","✅ One-click AI report in seconds"),
-            ("❌ No recommended actions","✅ Specific next steps every session"),
-        ]:
-            st.markdown(f'<div class="vs-row"><div class="vs-bad">{bad}</div>'
-                        f'<div class="vs-good">{good}</div></div>', unsafe_allow_html=True)
-
-    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
-    _lc1, _lc2, _lc3 = st.columns([2,1,2])
-    with _lc2:
-        if st.button("Open Dashboard →", type="primary", use_container_width=True):
-            st.session_state["show_landing"] = False
-            st.rerun()
-    st.stop()
-
-# ---------------------------------------------------------------------------
-# MAIN APP
-# ---------------------------------------------------------------------------
-
-df_full, ch_full, prod_full = load_and_enrich()
-DATA_MIN = df_full["date"].min().date()
-DATA_MAX = df_full["date"].max().date()
-
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
-
+# ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
-    <div style='padding:0.3rem 0 0.6rem 0;'>
-      <div style='font-size:1.05rem;font-weight:700;color:#FFFFFF;'>⚡ Pulse</div>
-      <div style='font-size:0.67rem;color:#9CA3AF;margin-top:1px;'>AI Insight Engine</div>
-    </div>""", unsafe_allow_html=True)
-
-    if st.button("← About Pulse", use_container_width=False):
-        st.session_state["show_landing"] = True
-        st.rerun()
+    <div style="padding: 0.2rem 0 1rem;">
+        <div style="font-size:1.05rem; font-weight:600; color:#F9FAFB; letter-spacing:-0.01em;">Pulse</div>
+        <div style="font-size:0.72rem; color:#6B7280; margin-top:2px;">AI insight engine</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("**📅 Date Range**")
-    preset = st.selectbox("Quick select", [
-        "Last 30 days","Last 90 days","Last 6 months",
-        "This year","All time","Custom range",
-    ], index=0)
 
-    if   preset == "Last 30 days":  d_start,d_end = DATA_MAX-timedelta(29),  DATA_MAX
-    elif preset == "Last 90 days":  d_start,d_end = DATA_MAX-timedelta(89),  DATA_MAX
-    elif preset == "Last 6 months": d_start,d_end = DATA_MAX-timedelta(179), DATA_MAX
-    elif preset == "This year":     d_start,d_end = date(DATA_MAX.year,1,1), DATA_MAX
-    elif preset == "All time":      d_start,d_end = DATA_MIN, DATA_MAX
-    else:                           d_start,d_end = None, None
+    st.markdown("""
+    <div style="font-size:0.65rem; font-weight:600; color:#6B7280;
+    text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.4rem;">
+    Controls
+    </div>
+    """, unsafe_allow_html=True)
 
-    if preset == "Custom range":
-        d_start = st.date_input("From", value=DATA_MAX-timedelta(29),
-                                 min_value=DATA_MIN, max_value=DATA_MAX)
-        d_end   = st.date_input("To",   value=DATA_MAX,
-                                 min_value=DATA_MIN, max_value=DATA_MAX)
-        if d_start > d_end:
-            st.error("Start must be before end.")
-            d_start, d_end = DATA_MAX-timedelta(29), DATA_MAX
-    else:
-        d_start = max(d_start, DATA_MIN)
-        d_end   = min(d_end,   DATA_MAX)
+    date_window = st.selectbox(
+        "Date window",
+        ["Last 7 days", "Last 14 days", "Last 30 days", "Last 90 days"],
+        index=0,
+    )
 
-    # Date range display — always fully visible
-    st.markdown(
-        f"<div style='font-size:0.76rem;color:#F3F4F6;font-weight:500;"
-        f"background:rgba(255,255,255,0.1);border-radius:6px;"
-        f"padding:5px 9px;margin-top:4px;border:1px solid rgba(255,255,255,0.15);'>"
-        f"📅 {d_start.strftime('%b %d, %Y')} → {d_end.strftime('%b %d, %Y')}"
-        f"</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("**🤖 AI Features**")
-    gemini_key = st.text_input("Gemini API Key", type="password",
-                                placeholder="Paste key to enable AI",
-                                help="Free at aistudio.google.com")
-    if gemini_key:
-        os.environ["GEMINI_API_KEY"] = gemini_key
-        st.markdown(
-            "<div style='font-size:0.71rem;background:rgba(22,163,74,0.22);"
-            "border-radius:7px;padding:4px 9px;margin-top:3px;color:#D1FAE5;'>"
-            "✅ AI active</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(
-            "<div style='font-size:0.71rem;color:#9CA3AF;margin-top:3px;'>"
-            "Add key to unlock AI features</div>", unsafe_allow_html=True)
-
-    ai_toggle = st.toggle(
-        "Show AI Insights on graphs",
-        value=False,
-        help="Expanders always show — toggle enables the Generate button inside",
+    top_n = st.selectbox(
+        "Top N products",
+        [5, 10, 20],
+        index=0,
     )
 
     st.markdown("---")
-    st.markdown("**💬 Ask Anything**")
-    st.markdown(
-        "<div style='font-size:0.68rem;color:#9CA3AF;margin-bottom:0.35rem;'>"
-        "Ask any question about your current data</div>", unsafe_allow_html=True)
 
-    sidebar_q = st.text_area("Q", height=72,
-                              placeholder="e.g. Why did revenue drop?\nWhich channel has best ROI?",
-                              label_visibility="collapsed",
-                              key="sidebar_question")
-    if st.button("Ask Pulse 🤖", use_container_width=True,
-                  disabled=not _has_key(), key="sidebar_ask"):
-        if sidebar_q.strip():
-            st.session_state["sidebar_answer_pending"] = sidebar_q.strip()
-        else:
-            st.warning("Type a question first.")
-    if not _has_key():
-        st.markdown(
-            "<div style='font-size:0.67rem;color:#6B7280;margin-top:-0.2rem;'>"
-            "Requires API key above</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-size:0.65rem; font-weight:600; color:#6B7280;
+    text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.4rem;">
+    Gemini API key
+    </div>
+    """, unsafe_allow_html=True)
+
+    gemini_key = st.text_input(
+        "Gemini API key",
+        type="password",
+        placeholder="Paste key to unlock AI",
+        label_visibility="collapsed",
+    )
+
+    if gemini_key:
+        os.environ["GEMINI_API_KEY"] = gemini_key
+        st.markdown("""
+        <div style="font-size:0.7rem; color:#34D399; margin-top:0.3rem;">
+        AI insights enabled
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="font-size:0.7rem; color:#6B7280; margin-top:0.3rem;">
+        Get a free key at aistudio.google.com
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
-    if st.button("🔄 Refresh Data", use_container_width=True):
-        with st.spinner("Re-running ETL..."):
-            from etl.pipeline import run as run_etl
-            run_etl()
-            st.cache_data.clear()
-        st.success("Done — reload page.")
 
-    st.markdown(
-        f"<div style='font-size:0.63rem;color:#6B7280;margin-top:0.7rem;'>"
-        f"Dataset: {DATA_MIN.strftime('%b %Y')} – {DATA_MAX.strftime('%b %Y')}"
-        f"</div>", unsafe_allow_html=True)
+    ai_on = st.toggle("Show AI insights on charts", value=False)
 
-# ---------------------------------------------------------------------------
-# Filtered data
-# ---------------------------------------------------------------------------
+# ── Persist to session state ─────────────────────────────────────────────────
+st.session_state["date_window"] = date_window
+st.session_state["top_n"]       = int(top_n)
+st.session_state["gemini_key"]  = gemini_key
+st.session_state["ai_on"]       = ai_on
 
-ts_start  = pd.Timestamp(d_start)
-ts_end    = pd.Timestamp(d_end)
-days_sel  = (d_end - d_start).days + 1
-cmp_days  = min(7, days_sel)
-
-df   = df_full[(df_full["date"]>=ts_start)&(df_full["date"]<=ts_end)].copy()
-ch   = ch_full[(ch_full["date"]>=ts_start)&(ch_full["date"]<=ts_end)].copy()
-prod = prod_full[(prod_full["date"]>=ts_start)&(prod_full["date"]<=ts_end)].copy()
-
-summary       = compute_period_summary(df, days=cmp_days)
-all_anomalies = get_all_anomalies(df_full)
-rec_anomalies = get_recent_anomalies(all_anomalies, days=min(days_sel, 60))
-ch_summary    = compute_channel_summary(ch, days=cmp_days)
-insights      = compile_all_insights(summary, rec_anomalies, ch_summary)
-
-total_rev    = df["revenue"].sum()
-total_orders = int(df["orders"].sum()) if "orders" in df.columns else 0
-high_count   = sum(1 for i in insights if i.get("impact") == "high")
-period_label = f"{d_start.strftime('%b %d')} – {d_end.strftime('%b %d, %Y')}"
-
-# ---------------------------------------------------------------------------
-# Sidebar Ask Anything — process
-# ---------------------------------------------------------------------------
-
-if "sidebar_answer_pending" in st.session_state:
-    q = st.session_state.pop("sidebar_answer_pending")
-    m_lines, ch_lines, ins_lines = [], [], []
-    for metric, data in summary.items():
-        if metric == "period_days" or not isinstance(data, dict): continue
-        pct = data.get("pct_change"); recent = data.get("recent_avg")
-        if pct is None or recent is None: continue
-        m_lines.append(f"  {metric}: {recent} (WoW:{pct*100:+.1f}%)")
-    try:
-        for _, row in ch_summary.iterrows():
-            roas = f"{row['roas']:.2f}x" if pd.notna(row.get("roas")) else "N/A"
-            ch_lines.append(f"  {row['channel']}: spend=${row['spend']:.0f}, ROAS={roas}")
-    except: pass
-    ins_lines = [f"  [{i.get('impact','').upper()}] {i.get('finding','')}" for i in insights[:6]]
-    prompt = textwrap.dedent(f"""
-        You are a data analytics advisor.
-        Answer using only the data below. Be specific and concise (3-5 sentences max).
-        USER QUESTION: {q}
-        METRICS: {chr(10).join(m_lines)}
-        CHANNELS: {chr(10).join(ch_lines)}
-        INSIGHTS: {chr(10).join(ins_lines)}
-    """).strip()
-    with st.spinner("Pulse is thinking..."):
-        answer = _gemini_post(prompt, max_tokens=400)
-    st.session_state["sidebar_answer"] = (q, answer)
-
-if "sidebar_answer" in st.session_state:
-    q_shown, a_shown = st.session_state["sidebar_answer"]
-    st.markdown(f"""
-    <div style='background:{GRAY_LIGHT};border-radius:9px;padding:0.8rem 0.95rem;
-         margin-bottom:0.9rem;border-left:3px solid {CRIMSON};'>
-      <div style='font-size:0.69rem;font-weight:700;color:{CRIMSON};
-           text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem;'>
-        You asked:</div>
-      <div style='font-size:0.8rem;color:{TEXT_DARK};margin-bottom:0.45rem;
-           font-style:italic;'>"{q_shown}"</div>
-      <div style='font-size:0.8rem;color:{TEXT_DARK};line-height:1.6;'>{a_shown}</div>
-    </div>""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------------------------
-# Hero
-# ---------------------------------------------------------------------------
-
-st.markdown(f"""
-<div class="hero">
-  <div class="hero-title">⚡ Pulse — Insight Engine</div>
-  <div class="hero-sub">{period_label} · {days_sel} days</div>
-  <div class="hero-stats">
-    <div class="hero-stat"><div class="hero-stat-val">${total_rev:,.0f}</div><div class="hero-stat-label">Total Revenue</div></div>
-    <div class="hero-stat"><div class="hero-stat-val">{total_orders:,}</div><div class="hero-stat-label">Total Orders</div></div>
-    <div class="hero-stat"><div class="hero-stat-val">{len(insights)}</div><div class="hero-stat-label">Insights</div></div>
-    <div class="hero-stat"><div class="hero-stat-val">{high_count}</div><div class="hero-stat-label">Need Attention</div></div>
-  </div>
-</div>""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------------------------
-# Tabs
-# ---------------------------------------------------------------------------
-
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "🏠 Overview","🚨 Anomalies","📣 Channels",
-    "📦 Products","🤖 AI Insights","📄 Report","📈 Advanced Analytics",
-])
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 1 — OVERVIEW
-# ═══════════════════════════════════════════════════════════════════════════
-with tab1:
-    st.markdown('<div class="section-header">KPI Snapshot</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="section-sub">Last {cmp_days} days vs prior {cmp_days} days</div>',
-                unsafe_allow_html=True)
-
-    kpi_cols = st.columns(len(KPI_META))
-    for col, (metric, meta) in zip(kpi_cols, KPI_META.items()):
-        data    = summary.get(metric, {})
-        recent  = data.get("recent_avg") if isinstance(data, dict) else None
-        pct     = data.get("pct_change") if isinstance(data, dict) else None
-        val_str = meta["fmt"](recent) if recent is not None else "—"
-        good    = meta["good"]
-        if pct is None:
-            delta = '<span class="kpi-delta-neu">No comparison</span>'
-        else:
-            arrow   = "▲" if pct > 0 else "▼"
-            lbl     = f"{arrow} {abs(pct)*100:.1f}% vs prior"
-            is_good = (pct>0 and good=="up") or (pct<0 and good=="down")
-            cls     = "kpi-delta-up" if is_good else ("kpi-delta-down" if good!="neutral" else "kpi-delta-neu")
-            delta   = f'<span class="{cls}">{lbl}</span>'
-        with col:
-            st.markdown(f"""
-            <div class="kpi-card">
-              <div>
-                <div class="kpi-icon">{meta['icon']}</div>
-                <div class="kpi-label">{meta['label']}</div>
-                <div class="kpi-value">{val_str}</div>
-              </div>
-              <div class="kpi-bottom">
-                {delta}
-                <div class="kpi-hint">{meta['hint']}</div>
-              </div>
-            </div>""", unsafe_allow_html=True)
-
-    # Revenue trend
-    st.markdown('<div class="section-header">Revenue Trend</div>', unsafe_allow_html=True)
-    fig_rev = go.Figure()
-    fig_rev.add_trace(go.Scatter(
-        x=df["date"], y=df["revenue"], mode="lines", name="Daily Revenue",
-        line=dict(color=CRIMSON, width=2.5),
-        fill="tozeroy", fillcolor="rgba(155,28,28,0.07)",
-    ))
-    if "revenue_roll_mean" in df.columns:
-        fig_rev.add_trace(go.Scatter(
-            x=df["date"], y=df["revenue_roll_mean"], mode="lines",
-            name="7-day avg", line=dict(color=CHARCOAL_MID, width=1.8, dash="dot"),
-        ))
-    fig_rev.update_layout(**_base_layout(height=300, x_title="Date", y_title="Revenue (USD)"))
-    fig_rev.update_yaxes(tickprefix="$")
-    st.plotly_chart(fig_rev, use_container_width=True)
-    graph_ai_expander("rev_trend",
-        f"Daily revenue {d_start} to {d_end}. Total ${total_rev:,.0f} over {days_sel} days.",
-        ai_toggle)
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown('<div class="section-header">conversion_rate</div>', unsafe_allow_html=True)
-        fig_cr = go.Figure()
-        fig_cr.add_trace(go.Scatter(
-            x=df["date"], y=df["conversion_rate"]*100, mode="lines",
-            line=dict(color=GREEN, width=2.5),
-            fill="tozeroy", fillcolor="rgba(22,163,74,0.07)", name="conversion_rate",
-        ))
-        fig_cr.update_layout(**_base_layout(height=260, x_title="Date", y_title="Conversion Rate (%)"))
-        fig_cr.update_yaxes(ticksuffix="%")
-        st.plotly_chart(fig_cr, use_container_width=True)
-        cr_val = (summary.get("conversion_rate",{}).get("recent_avg") or 0)*100
-        graph_ai_expander("conv_rate",
-            f"Conversion rate. Avg: {cr_val:.2f}%. Period: {d_start} to {d_end}.", ai_toggle)
-
-    with col_b:
-        st.markdown('<div class="section-header">New vs Returning Customers</div>', unsafe_allow_html=True)
-        fig_cust = go.Figure()
-        fig_cust.add_trace(go.Scatter(
-            x=df["date"], y=df["new_customers"], mode="lines",
-            name="new_customers", line=dict(color=CRIMSON, width=2),
-            stackgroup="one", fillcolor="rgba(155,28,28,0.25)",
-        ))
-        fig_cust.add_trace(go.Scatter(
-            x=df["date"], y=df["returning_customers"], mode="lines",
-            name="returning_customers", line=dict(color=CHARCOAL_MID, width=2),
-            stackgroup="one", fillcolor="rgba(55,65,81,0.25)",
-        ))
-        fig_cust.update_layout(**_base_layout(height=260, x_title="Date", y_title="Customer Count"))
-        st.plotly_chart(fig_cust, use_container_width=True)
-        graph_ai_expander("cust_mix",
-            f"New vs returning customers. Period: {d_start} to {d_end}.", ai_toggle)
-
-    col_c, col_d = st.columns(2)
-    with col_c:
-        st.markdown('<div class="section-header">aov</div>', unsafe_allow_html=True)
-        fig_aov = go.Figure()
-        fig_aov.add_trace(go.Scatter(
-            x=df["date"], y=df["aov"], mode="lines",
-            line=dict(color=AMBER, width=2.5),
-            fill="tozeroy", fillcolor="rgba(217,119,6,0.07)", name="aov",
-        ))
-        fig_aov.update_layout(**_base_layout(height=260, x_title="Date", y_title="AOV (USD)"))
-        fig_aov.update_yaxes(tickprefix="$")
-        st.plotly_chart(fig_aov, use_container_width=True)
-        aov_val = summary.get("aov",{}).get("recent_avg") or 0
-        graph_ai_expander("aov",
-            f"AOV trend. Avg: ${aov_val:.2f}. Period: {d_start} to {d_end}.", ai_toggle)
-
-    with col_d:
-        st.markdown('<div class="section-header">roas</div>', unsafe_allow_html=True)
-        fig_roas = go.Figure()
-        fig_roas.add_trace(go.Scatter(
-            x=df["date"], y=df["roas"], mode="lines",
-            line=dict(color=RED_ACCENT, width=2.5),
-            fill="tozeroy", fillcolor="rgba(220,38,38,0.07)", name="roas",
-        ))
-        fig_roas.add_hline(y=2, line_dash="dot", line_color=CHARCOAL_MID,
-                           annotation_text="Min target 2x",
-                           annotation_font_color=CHARCOAL_MID)
-        fig_roas.update_layout(**_base_layout(height=260, x_title="Date", y_title="ROAS (x)"))
-        fig_roas.update_yaxes(ticksuffix="x")
-        st.plotly_chart(fig_roas, use_container_width=True)
-        roas_val = summary.get("roas",{}).get("recent_avg") or 0
-        graph_ai_expander("roas",
-            f"ROAS trend. Avg: {roas_val:.2f}x. Target 2x. Period: {d_start} to {d_end}.", ai_toggle)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 2 — ANOMALIES
-# ═══════════════════════════════════════════════════════════════════════════
-with tab2:
-    st.markdown('<div class="section-header">Anomaly Summary</div>', unsafe_allow_html=True)
-
-    most_affected="—"; worst_dev=0.0; worst_date="—"
-    if not rec_anomalies.empty:
-        mc = rec_anomalies["metric"].value_counts()
-        most_affected = METRIC_LABELS.get(mc.index[0], mc.index[0]) if len(mc) else "—"
-        wr = rec_anomalies.loc[rec_anomalies["deviation_pct"].idxmax()]
-        worst_dev  = wr["deviation_pct"]
-        wd = wr["date"]
-        worst_date = wd.date().strftime("%b %d, %Y") if hasattr(wd,"date") else str(wd)
-
-    sc1,sc2,sc3,sc4 = st.columns(4)
-    for col,val,label,color in [
-        (sc1, len(rec_anomalies),       "Total Anomalies",         CRIMSON),
-        (sc2, most_affected,            "Most Affected Metric",    CHARCOAL_MID),
-        (sc3, f"{worst_dev*100:.0f}%",  "Largest Deviation",       RED_ACCENT),
-        (sc4, worst_date,               "Date of Worst Anomaly",   AMBER),
-    ]:
-        with col:
-            st.markdown(f"""
-            <div class="anomaly-stat-card">
-              <div class="anom-val" style="color:{color};">{val}</div>
-              <div class="anom-label">{label}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
-
-    if rec_anomalies.empty:
-        st.markdown(f"""
-        <div style='text-align:center;padding:2rem;background:{WHITE};
-             border-radius:12px;border:1px solid {BORDER};'>
-          <div style='font-size:1.7rem;'>✅</div>
-          <div style='font-weight:700;font-size:0.93rem;color:{TEXT_DARK};margin-top:0.3rem;'>
-            No anomalies detected</div>
-          <div style='color:{TEXT_MID};font-size:0.78rem;margin-top:0.12rem;'>
-            All metrics within normal range.</div>
-        </div>""", unsafe_allow_html=True)
-    else:
-        anom_df = rec_anomalies.copy()
-        anom_df["date"]         = pd.to_datetime(anom_df["date"])
-        anom_df["metric_label"] = anom_df["metric"].map(lambda m: METRIC_LABELS.get(m,m))
-        anom_df["severity"]     = anom_df["deviation_pct"].apply(lambda d:"High" if d>=0.20 else "Medium")
-
-        cb1,cb2 = st.columns([3,2])
-        with cb1:
-            st.markdown('<div class="section-header">Weekly Anomaly Frequency</div>', unsafe_allow_html=True)
-            st.markdown('<div class="section-sub">Red = high severity · Amber = medium severity</div>', unsafe_allow_html=True)
-            anom_df["week"] = anom_df["date"].dt.to_period("W").apply(lambda p: p.start_time)
-            weekly = anom_df.groupby(["week","severity"]).size().reset_index(name="count")
-            fig_bar = go.Figure()
-            for sev,color in [("High",RED_ACCENT),("Medium",AMBER)]:
-                sub = weekly[weekly["severity"]==sev]
-                if not sub.empty:
-                    fig_bar.add_trace(go.Bar(x=sub["week"],y=sub["count"],
-                        name=sev,marker_color=color,opacity=0.88))
-            fig_bar.update_layout(**_base_layout(height=280,x_title="Week",y_title="Anomaly Count"),
-                                   barmode="stack")
-            st.plotly_chart(fig_bar, use_container_width=True)
-            graph_ai_expander("anom_bar",
-                f"Weekly anomaly frequency. Total: {len(anom_df)}. Most affected: {most_affected}.",
-                ai_toggle)
-
-        with cb2:
-            st.markdown('<div class="section-header">Metric Stability</div>', unsafe_allow_html=True)
-            st.markdown('<div class="section-sub">Most volatile metrics first</div>', unsafe_allow_html=True)
-            stability = (
-                anom_df.groupby("metric_label")
-                .agg(count=("deviation_pct","count"), worst=("deviation_pct","max"))
-                .reset_index().sort_values("count", ascending=False)
-            )
-            for _, row in stability.iterrows():
-                bb = RED_LIGHT   if row["worst"]>=0.20 else AMBER_LIGHT
-                bc = RED_ACCENT  if row["worst"]>=0.20 else AMBER
-                bl = "🔴 High"  if row["worst"]>=0.20 else "🟡 Medium"
-                st.markdown(f"""
-                <div style='display:flex;align-items:center;justify-content:space-between;
-                     padding:0.48rem 0.72rem;background:{WHITE};border-radius:8px;
-                     border:1px solid {BORDER};margin-bottom:0.32rem;'>
-                  <div>
-                    <div style='font-weight:600;font-size:0.8rem;'>{row['metric_label']}</div>
-                    <div style='font-size:0.68rem;color:{TEXT_MID};'>
-                      {int(row['count'])} anomalies · worst {row['worst']*100:.0f}%</div>
-                  </div>
-                  <div style='background:{bb};color:{bc};padding:2px 7px;
-                       border-radius:20px;font-size:0.64rem;font-weight:700;'>{bl}</div>
-                </div>""", unsafe_allow_html=True)
-
-        cd1,cd2 = st.columns([2,3])
-        with cd1:
-            st.markdown('<div class="section-header">Share by Metric</div>', unsafe_allow_html=True)
-            donut_data = anom_df["metric_label"].value_counts().reset_index()
-            donut_data.columns = ["metric","count"]
-            donut_colors = [
-                ANOMALY_METRIC_COLORS.get(
-                    {v:k for k,v in METRIC_LABELS.items()}.get(m,m), CRIMSON)
-                for m in donut_data["metric"]
-            ]
-            fig_donut = go.Figure(go.Pie(
-                labels=donut_data["metric"], values=donut_data["count"],
-                hole=0.55,
-                marker=dict(colors=donut_colors, line=dict(color=WHITE,width=2)),
-                textinfo="label+percent", textfont=dict(size=11),
-            ))
-            fig_donut.update_layout(
-                height=270, paper_bgcolor=WHITE,
-                font=dict(family="DM Sans"),
-                margin=dict(l=10,r=10,t=10,b=10), showlegend=False,
-                annotations=[dict(text=f"<b>{len(anom_df)}</b><br>total",
-                    x=0.5,y=0.5,font_size=13,font_color=TEXT_DARK,showarrow=False)],
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
-            graph_ai_expander("anom_donut",
-                f"Anomaly share by metric. Most volatile: {most_affected}.", ai_toggle)
-
-        with cd2:
-            st.markdown('<div class="section-header">Anomaly Detail</div>', unsafe_allow_html=True)
-            st.markdown('<div class="section-sub">Click any row to expand and get an AI explanation.</div>', unsafe_allow_html=True)
-            for _, row in anom_df.sort_values("date",ascending=False).head(12).iterrows():
-                is_up     = "up" in str(row.get("direction",""))
-                dev       = row.get("deviation_pct",0)
-                sc        = RED_ACCENT if dev>=0.20 else AMBER
-                sb        = RED_LIGHT  if dev>=0.20 else AMBER_LIGHT
-                icon      = "↑" if is_up else "↓"
-                date_str  = row["date"].date().strftime("%b %d, %Y") if hasattr(row["date"],"date") else str(row["date"])
-                atype     = str(row.get("anomaly_type","")).replace("_"," ").title()
-                with st.expander(f"{icon} {row['metric_label']}  ·  {dev*100:.0f}% deviation  ·  {date_str}",
-                                  expanded=False):
-                    c1,c2 = st.columns([1,2])
-                    with c1:
-                        st.markdown(f"""
-                        <div style='background:{sb};border-radius:9px;padding:0.8rem;border:1px solid {sc};'>
-                          <div style='font-weight:700;font-size:0.85rem;'>{row['metric_label']}</div>
-                          <div style='font-size:1.4rem;font-weight:700;color:{sc};margin:0.25rem 0;'>
-                            {icon} {dev*100:.1f}%</div>
-                          <div style='font-size:0.68rem;color:{TEXT_MID};'>{atype}</div>
-                          <div style='font-size:0.68rem;color:{TEXT_MID};margin-top:0.18rem;'>{date_str}</div>
-                        </div>""", unsafe_allow_html=True)
-                    with c2:
-                        if _has_key():
-                            bk=f"anom_btn_{row.name}"; rk=f"anom_res_{row.name}"
-                            if st.button("🤖 Explain this anomaly", key=bk):
-                                with st.spinner("Analysing..."):
-                                    result = call_gemini("anomaly",metric=row["metric"],
-                                        direction=str(row.get("direction","")),
-                                        deviation_pct=dev,
-                                        anomaly_type=str(row.get("anomaly_type","")),
-                                        period_summary=summary)
-                                st.session_state[rk] = result or "No result."
-                            if rk in st.session_state:
-                                st.markdown(
-                                    f'<div class="ai-box"><strong>🤖 Likely causes & actions:</strong>'
-                                    f'<br><br>{st.session_state[rk].replace(chr(10),"<br>")}</div>',
-                                    unsafe_allow_html=True)
-                        else:
-                            ai_placeholder("AI explanation available for this anomaly")
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 3 — CHANNELS
-# ═══════════════════════════════════════════════════════════════════════════
-with tab3:
-    st.markdown('<div class="section-header">Channel Performance</div>', unsafe_allow_html=True)
-
-    CHART_H = 320
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown('<div class="section-sub">Revenue attributed by channel</div>', unsafe_allow_html=True)
-        colors_ch = [CHANNEL_COLORS.get(c,CRIMSON) for c in ch_summary["channel"]]
-        fig_ch = go.Figure(go.Bar(
-            x=ch_summary["channel"], y=ch_summary["revenue_attributed"],
-            marker_color=colors_ch,
-            text=[f"${v:,.0f}" for v in ch_summary["revenue_attributed"]],
-            textposition="outside",
-        ))
-        fig_ch.update_layout(**_base_layout(height=CHART_H, x_title="Channel", y_title="Revenue Attributed (USD)"))
-        fig_ch.update_yaxes(tickprefix="$")
-        st.plotly_chart(fig_ch, use_container_width=True)
-        top_ch = ch_summary.sort_values("revenue_attributed",ascending=False).iloc[0]["channel"]
-        graph_ai_expander("ch_revenue", f"Revenue by channel. Top: {top_ch}.", ai_toggle)
-
-    with col2:
-        ch_roas = ch_summary.dropna(subset=["roas"]).sort_values("roas")
-        st.markdown('<div class="section-sub">roas by channel — target ≥ 2x</div>', unsafe_allow_html=True)
-        if not ch_roas.empty:
-            colors_roas = [CHANNEL_COLORS.get(c,CRIMSON) for c in ch_roas["channel"]]
-            fig_rc = go.Figure(go.Bar(
-                x=ch_roas["roas"], y=ch_roas["channel"],
-                orientation="h", marker_color=colors_roas,
-                text=[f"{v:.2f}x" for v in ch_roas["roas"]], textposition="outside",
-            ))
-            fig_rc.add_vline(x=2, line_dash="dot", line_color=RED_ACCENT,
-                              annotation_text="Target 2x", annotation_font_color=RED_ACCENT)
-            fig_rc.update_layout(**_base_layout(height=CHART_H, x_title="ROAS (x)", y_title="Channel"))
-            fig_rc.update_xaxes(ticksuffix="x")
-            st.plotly_chart(fig_rc, use_container_width=True)
-            graph_ai_expander("ch_roas",
-                f"ROAS by channel. Best: {ch_roas.iloc[-1]['channel']} at {ch_roas.iloc[-1]['roas']:.2f}x.",
-                ai_toggle)
-        else:
-            st.info("Not enough spend data for ROAS in this period.")
-
-    st.markdown('<div class="section-header">Channel Detail Table</div>', unsafe_allow_html=True)
-    ch_tbl = ch_summary.copy()
-    ch_tbl["spend"]              = ch_tbl["spend"].apply(lambda x: f"${x:,.0f}")
-    ch_tbl["revenue_attributed"] = ch_tbl["revenue_attributed"].apply(lambda x: f"${x:,.0f}")
-    ch_tbl["roas"]               = ch_tbl["roas"].apply(lambda x: f"{x:.2f}x" if pd.notna(x) else "—")
-    ch_tbl["conversion_rate"]    = ch_tbl["conversion_rate"].apply(lambda x: f"{x*100:.2f}%" if pd.notna(x) else "—")
-    ch_tbl.columns = ["Channel","Spend","Clicks","Conversions","Revenue Attributed","ROAS","Conversion Rate"]
-    st.dataframe(ch_tbl, use_container_width=True, hide_index=True)
-
-    st.markdown('<div class="section-header">Channel Trends Over Time</div>', unsafe_allow_html=True)
-    tc1,tc2,tc3 = st.columns([1,1,2])
-    with tc1:
-        ch_ds = st.date_input("From##ch", value=d_start, min_value=DATA_MIN, max_value=DATA_MAX, key="ch_ds")
-    with tc2:
-        ch_de = st.date_input("To##ch",   value=d_end,   min_value=DATA_MIN, max_value=DATA_MAX, key="ch_de")
-    with tc3:
-        ch_opts = ch_full["channel"].unique().tolist()
-        sel_chs = st.multiselect("Channels", ch_opts,
-                                  default=[c for c in ["Social","Paid Search","Email"] if c in ch_opts])
-    if ch_ds > ch_de:
-        st.error("Start must be before end.")
-    elif sel_chs:
-        ch_tr = ch_full[
-            (ch_full["channel"].isin(sel_chs)) &
-            (ch_full["date"]>=pd.Timestamp(ch_ds)) &
-            (ch_full["date"]<=pd.Timestamp(ch_de))
-        ]
-        fig_tr = go.Figure()
-        for cn in sel_chs:
-            cd = ch_tr[ch_tr["channel"]==cn]
-            fig_tr.add_trace(go.Scatter(
-                x=cd["date"], y=cd["revenue_attributed"],
-                mode="lines", name=cn,
-                line=dict(color=CHANNEL_COLORS.get(cn,CRIMSON), width=2.5),
-            ))
-        fig_tr.update_layout(**_base_layout(height=300, x_title="Date", y_title="Revenue Attributed (USD)"))
-        fig_tr.update_yaxes(tickprefix="$")
-        st.plotly_chart(fig_tr, use_container_width=True)
-        graph_ai_expander("ch_trend",
-            f"Revenue over time for {', '.join(sel_chs)}. Period: {ch_ds} to {ch_de}.", ai_toggle)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 4 — PRODUCTS
-# ═══════════════════════════════════════════════════════════════════════════
-with tab4:
-    st.markdown('<div class="section-header">Product Performance</div>', unsafe_allow_html=True)
-
-    PROD_CHART_H = 320
-    pc1, pc2 = st.columns(2)
-
-    with pc1:
-        st.markdown('<div class="section-sub">Revenue by category</div>', unsafe_allow_html=True)
-        cat_rev = (prod.groupby("category")["revenue"].sum()
-                   .reset_index().sort_values("revenue", ascending=False))
-        cat_rev["icon"]  = cat_rev["category"].map(lambda c: CATEGORY_ICONS.get(c,"📦"))
-        cat_rev["label"] = cat_rev.apply(lambda r: f"{r['icon']} {r['category']}", axis=1)
-        colors_cat = [CATEGORY_COLORS.get(c, CRIMSON) for c in cat_rev["category"]]
-        fig_cat = go.Figure(go.Bar(
-            x=cat_rev["label"], y=cat_rev["revenue"],
-            marker_color=colors_cat,
-            text=[f"${v:,.0f}" for v in cat_rev["revenue"]],
-            textposition="outside",
-        ))
-        fig_cat.update_layout(**_base_layout(height=PROD_CHART_H,
-                              x_title="Category", y_title="Revenue (USD)"))
-        fig_cat.update_yaxes(tickprefix="$")
-        st.plotly_chart(fig_cat, use_container_width=True)
-        graph_ai_expander("cat_rev",
-            f"Revenue by category. Top: {cat_rev.iloc[0]['category']} at ${cat_rev.iloc[0]['revenue']:,.0f}.",
-            ai_toggle)
-
-    with pc2:
-        st.markdown('<div class="section-sub">Top products in selected category — sorted high to low</div>',
-                    unsafe_allow_html=True)
-        sel_cat = st.selectbox("Drill into category",
-                                sorted(prod["category"].unique()), key="drill_cat")
-        top_in_cat = (
-            prod[prod["category"]==sel_cat]
-            .groupby("product_label")["revenue"].sum()
-            .reset_index()
-            .sort_values("revenue", ascending=False)   # descending
-            .head(8)
-        )
-        fig_top = go.Figure(go.Bar(
-            x=top_in_cat["revenue"],
-            y=top_in_cat["product_label"],
-            orientation="h",
-            marker_color=CATEGORY_COLORS.get(sel_cat, CRIMSON),
-            text=[f"${v:,.0f}" for v in top_in_cat["revenue"]],
-            textposition="outside",
-        ))
-        fig_top.update_layout(**_base_layout(height=PROD_CHART_H,
-                              x_title="Revenue (USD)", y_title="Product"))
-        fig_top.update_xaxes(tickprefix="$")
-        fig_top.update_yaxes(autorange="reversed")   # highest at top
-        st.plotly_chart(fig_top, use_container_width=True)
-        graph_ai_expander(f"cat_{sel_cat}",
-            f"Top products in {sel_cat}. Best: {top_in_cat.iloc[0]['product_label']} "
-            f"at ${top_in_cat.iloc[0]['revenue']:,.0f}.", ai_toggle)
-
-    # ── Top N Products ──────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Top Products</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-sub">'
-        'Ranked by <strong>total revenue</strong> in the selected period. '
-        'Bar shows each product\'s share of the #1 product\'s revenue.'
-        '</div>', unsafe_allow_html=True)
-
-    fc1, fc2, fc3 = st.columns([1,2,2])
-    with fc1:
-        top_n = st.slider("Top N", min_value=5, max_value=20, value=10, step=1)
-    with fc2:
-        all_cats   = sorted(prod["category"].unique().tolist())
-        sel_cats   = st.multiselect("Filter by category", all_cats,
-                                     default=all_cats, key="top_n_cats")
-    with fc3:
-        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
-        st.caption(f"Showing top {top_n} across {len(sel_cats)} categories · {period_label}")
-
-    if not sel_cats:
-        st.warning("Select at least one category.")
-    else:
-        prod_agg = (
-            prod[prod["category"].isin(sel_cats)]
-            .groupby(["product_id","product_label","category"])
-            .agg(revenue=("revenue","sum"), units_sold=("units_sold","sum"))
-            .reset_index()
-            .sort_values("revenue", ascending=False)
-            .head(top_n)
-        )
-        if prod_agg.empty:
-            st.info("No products found for the selected filters.")
-        else:
-            max_rev = prod_agg["revenue"].max()
-            half    = len(prod_agg)//2 + len(prod_agg)%2
-            left_df = prod_agg.iloc[:half]
-            right_df= prod_agg.iloc[half:]
-
-            tc1, tc2 = st.columns(2)
-
-            def render_tiles(items, col, start_rank):
-                with col:
-                    for i, row in enumerate(items.itertuples(), start_rank):
-                        bar_pct   = int((row.revenue / max_rev) * 100)
-                        avg_price = row.revenue / row.units_sold if row.units_sold > 0 else 0
-                        cat_icon  = CATEGORY_ICONS.get(row.category, "📦")
-                        cat_color = CATEGORY_COLORS.get(row.category, CRIMSON)
-                        st.markdown(f"""
-                        <div class="prod-tile">
-                          <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <div style="font-weight:700;font-size:0.88rem;
-                                 color:{CRIMSON};min-width:1.25rem;">#{i}</div>
-                            <div style="font-size:0.9rem;">{cat_icon}</div>
-                            <div style="flex:1;min-width:0;">
-                              <div style="font-weight:600;font-size:0.78rem;
-                                   white-space:nowrap;overflow:hidden;
-                                   text-overflow:ellipsis;">{row.product_label}</div>
-                              <div style="font-size:0.66rem;color:{TEXT_MID};">
-                                {row.category} &nbsp;·&nbsp;
-                                {row.units_sold:.0f} units &nbsp;·&nbsp;
-                                avg ${avg_price:.2f}
-                              </div>
-                              <div style="display:flex;align-items:center;
-                                   gap:0.35rem;margin-top:0.22rem;">
-                                <div style="flex:1;height:3px;background:{GRAY_LIGHT};
-                                     border-radius:3px;overflow:hidden;">
-                                  <div style="height:3px;width:{bar_pct}%;
-                                       background:{cat_color};border-radius:3px;"></div>
-                                </div>
-                                <div style="font-size:0.63rem;color:{TEXT_LIGHT};
-                                     min-width:36px;">{bar_pct}% of #1</div>
-                              </div>
-                            </div>
-                            <div style="text-align:right;min-width:65px;">
-                              <div style="font-weight:700;font-size:0.85rem;
-                                   color:{CRIMSON};">${row.revenue:,.0f}</div>
-                              <div style="font-size:0.61rem;color:{TEXT_LIGHT};">revenue</div>
-                            </div>
-                          </div>
-                        </div>""", unsafe_allow_html=True)
-
-            render_tiles(left_df,  tc1, 1)
-            render_tiles(right_df, tc2, len(left_df)+1)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 5 — AI INSIGHTS
-# ═══════════════════════════════════════════════════════════════════════════
-with tab5:
-    if not _has_key():
-        st.markdown(f"""
-        <div class="callout">
-          🔑 <strong>Add your Gemini API key in the sidebar</strong> to unlock all
-          AI features. Free at
-          <a href="https://aistudio.google.com" target="_blank"
-             style="color:{CRIMSON};">aistudio.google.com</a>.
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown('<div class="section-header">AI Summary</div>', unsafe_allow_html=True)
-    if _has_key():
-        if st.button("Generate Summary", key="gen_narrative"):
-            with st.spinner("Writing summary..."):
-                r = call_gemini("narrative", insights=insights,
-                                period_summary=summary, date_label=period_label)
-            st.session_state["narrative_result"] = r or "No result."
-        if "narrative_result" in st.session_state:
-            st.markdown(
-                f'<div class="ai-box">✨ <strong>Summary</strong><br><br>'
-                f'{st.session_state["narrative_result"]}</div>', unsafe_allow_html=True)
-        else:
-            st.caption("Click Generate Summary to create your AI narrative.")
-    else:
-        ai_placeholder("AI will write a 3-5 sentence executive summary of your business performance")
-
-    st.markdown('<div class="section-header">Key Findings</div>', unsafe_allow_html=True)
-    if not insights:
-        st.success("No significant changes — metrics are stable ✅")
-    else:
-        for ins in insights:
-            impact = ins.get("impact","low")
-            badge  = {"high":"🔴 High","medium":"🟡 Medium","low":"🟢 Low"}.get(impact, impact)
-            arrow  = "↑" if ins.get("direction")=="positive" else "↓"
-            st.markdown(f"""
-            <div class="insight-card insight-{impact}">
-              <span class="badge badge-{impact}">{badge}</span>
-              {arrow} {ins.get('finding','')}
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown('<div class="section-header">Recommendations</div>', unsafe_allow_html=True)
-    if _has_key():
-        if st.button("Generate Recommendations", key="gen_recs"):
-            with st.spinner("Building recommendations..."):
-                r = call_gemini("recommendations", insights=insights,
-                                channel_summary=ch_summary, period_summary=summary)
-            st.session_state["recs_result"] = r or "No result."
-        if "recs_result" in st.session_state:
-            st.markdown(
-                f'<div class="ai-box">🎯 <strong>Recommended Actions</strong><br><br>'
-                f'{st.session_state["recs_result"].replace(chr(10),"<br>")}</div>',
-                unsafe_allow_html=True)
-        else:
-            st.caption("Click Generate Recommendations.")
-    else:
-        ai_placeholder("AI will generate 3-5 prioritised, specific action recommendations")
-
-    st.markdown("---")
-    st.markdown('<div class="section-header">💬 Ask Anything</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="section-sub">Ask a question about your data ({period_label}). '
-                f'Also available in the sidebar on every tab.</div>', unsafe_allow_html=True)
-
-    tab_q = st.text_area("Your question", height=95,
-        placeholder="e.g. Why did revenue drop?\nWhich channel has best ROI?\nWhat should I focus on?",
-        label_visibility="collapsed", key="tab5_question")
-    if st.button("Ask Pulse 🤖", key="tab5_ask", disabled=not _has_key()):
-        if tab_q.strip():
-            st.session_state["sidebar_answer_pending"] = tab_q.strip()
-            st.rerun()
-        else:
-            st.warning("Type a question first.")
-    if not _has_key():
-        ai_placeholder("Ask Pulse any question about your data and get a direct, data-grounded answer")
-    if "sidebar_answer" in st.session_state:
-        _, a = st.session_state["sidebar_answer"]
-        st.markdown(
-            f'<div class="ai-box">💬 <strong>Pulse says:</strong><br><br>{a}</div>',
-            unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 6 — REPORT
-# ═══════════════════════════════════════════════════════════════════════════
-with tab6:
-    st.markdown('<div class="section-header">Generate Report</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Download a full written report ready to share with your team or clients.</div>',
-                unsafe_allow_html=True)
-
-    rc1, rc2 = st.columns([1,2])
-    with rc1:
-        report_mode = st.radio("Date range for report",
-                                ["Use sidebar range","Custom range"], horizontal=True)
-        if report_mode == "Use sidebar range":
-            rep_start, rep_end = d_start, d_end
-            st.markdown(
-                f"<div style='font-size:0.76rem;color:{TEXT_MID};margin-top:0.2rem;'>"
-                f"📅 {rep_start.strftime('%b %d, %Y')} → {rep_end.strftime('%b %d, %Y')}"
-                f"</div>", unsafe_allow_html=True)
-        else:
-            rep_start = st.date_input("Report from", value=d_start,
-                                       min_value=DATA_MIN, max_value=DATA_MAX, key="rep_start")
-            rep_end   = st.date_input("Report to",   value=d_end,
-                                       min_value=DATA_MIN, max_value=DATA_MAX, key="rep_end")
-            if rep_start > rep_end:
-                st.error("Start must be before end.")
-                rep_start, rep_end = d_start, d_end
-        include_ai = st.checkbox("Include AI narratives", value=_has_key())
-        gen_btn    = st.button("📥 Generate Report", type="primary", use_container_width=True)
-
-    with rc2:
-        st.markdown(f"""
-        <div style='background:{WHITE};border-radius:10px;padding:0.95rem;
-             border:1px solid {BORDER};font-size:0.8rem;color:{TEXT_MID};'>
-          <strong style='color:{TEXT_DARK};'>Report includes:</strong><br><br>
-          ✅ &nbsp;Executive summary<br>
-          ✅ &nbsp;KPIs with week-over-week comparison<br>
-          ✅ &nbsp;Anomalies with deviation details<br>
-          ✅ &nbsp;Channel performance breakdown<br>
-          ✅ &nbsp;Top products ranked by revenue<br>
-          ✅ &nbsp;Recommended next actions
-        </div>""", unsafe_allow_html=True)
-
-    if gen_btn:
-        rep_df = df_full[
-            (df_full["date"]>=pd.Timestamp(rep_start)) &
-            (df_full["date"]<=pd.Timestamp(rep_end))
-        ]
-        if rep_df.empty:
-            st.error(
-                f"⚠️ No data found between **{rep_start}** and **{rep_end}**. "
-                f"Please select dates within: "
-                f"**{DATA_MIN.strftime('%b %d, %Y')}** → **{DATA_MAX.strftime('%b %d, %Y')}**."
-            )
-        else:
-            rep_days   = max(1, (rep_end-rep_start).days+1)
-            rep_cmp    = min(7, rep_days)
-            rep_sum    = compute_period_summary(rep_df, days=rep_cmp)
-            rep_ch     = ch_full[(ch_full["date"]>=pd.Timestamp(rep_start))&(ch_full["date"]<=pd.Timestamp(rep_end))]
-            rep_prod   = prod_full[(prod_full["date"]>=pd.Timestamp(rep_start))&(prod_full["date"]<=pd.Timestamp(rep_end))]
-            rep_anom   = get_recent_anomalies(all_anomalies, days=rep_days)
-            rep_ch_sum = compute_channel_summary(rep_ch, days=rep_cmp)
-            rep_prods  = compute_top_products(rep_prod, n=5, days=rep_cmp)
-            rep_ins    = compile_all_insights(rep_sum, rep_anom, rep_ch_sum)
-
-            with st.spinner("Assembling report..."):
-                ai_nar=ai_recs=ai_anom_exp=None
-                if include_ai and _has_key():
-                    rl = f"{rep_start.strftime('%b %d')} – {rep_end.strftime('%b %d, %Y')}"
-                    ai_nar  = call_gemini("narrative", insights=rep_ins, period_summary=rep_sum, date_label=rl)
-                    ai_recs = call_gemini("recommendations", insights=rep_ins,
-                                          channel_summary=rep_ch_sum, period_summary=rep_sum)
-                    if not rep_anom.empty:
-                        ta = rep_anom.iloc[0]
-                        ai_anom_exp = call_gemini("anomaly", metric=ta["metric"],
-                            direction=str(ta.get("direction","")),
-                            deviation_pct=float(ta.get("deviation_pct",0)),
-                            anomaly_type=str(ta.get("anomaly_type","")),
-                            period_summary=rep_sum)
-                report_text = generate_report(
-                    period_summary=rep_sum, insights=rep_ins,
-                    anomalies=rep_anom, channel_summary=rep_ch_sum,
-                    top_products=rep_prods, report_date=rep_end,
-                    ai_narrative=ai_nar, ai_anomaly_explanation=ai_anom_exp,
-                    ai_recommendations=ai_recs, save=True,
-                )
-            st.session_state["last_report"] = report_text
-            st.success(f"✅ Report ready — {len(rep_df):,} days of data.")
-            st.download_button(
-                label="⬇️ Download Report (.txt)",
-                data=report_text,
-                file_name=f"pulse_report_{rep_start}_{rep_end}.txt",
-                mime="text/plain",
-                use_container_width=True,
-            )
-
-    # Report preview / sample
-    st.markdown("---")
-    st.markdown('<div class="section-header">Report Preview</div>', unsafe_allow_html=True)
-    if "last_report" in st.session_state:
-        st.markdown('<div class="section-sub">Your most recently generated report.</div>',
-                    unsafe_allow_html=True)
-        with st.expander("📄 View last generated report", expanded=False):
-            st.code(st.session_state["last_report"], language=None)
-    else:
-        st.markdown('<div class="section-sub">Generate a report above to see the full output. '
-                    'Here is the report structure:</div>', unsafe_allow_html=True)
-        sample = """
-------------------------------------------------------------------------
-  PULSE — DAILY INSIGHT REPORT
-  Generated: YYYY-MM-DD HH:MM
-  Reporting period: 7-day window ending YYYY-MM-DD
-------------------------------------------------------------------------
-
-EXECUTIVE SUMMARY
-------------------------------------------------------------------------
-[AI-generated 3-5 sentence plain-English summary of business performance]
-
-KPI SNAPSHOT  (last 7 days vs prior 7 days)
-------------------------------------------------------------------------
-  Metric                        Recent        Prior       Change
-  revenue (avg/day)             $X,XXX        $X,XXX      ^ +X.X%
-  orders (avg/day)              XXX           XXX         ^ +X.X%
-  aov                           $XX.XX        $XX.XX      v -X.X%
-  conversion_rate               X.XX%         X.XX%       v -X.X%
-  roas                          X.XXx         X.XXx       ^ +X.X%
-
-ANOMALIES DETECTED
-------------------------------------------------------------------------
-  [UP]   Revenue — Single Day Spike (XX% deviation) on MMM DD, YYYY
-  [DOWN] Conversion Rate — Sustained Deviation (XX%)
-
-KEY FINDINGS
-------------------------------------------------------------------------
-  [HIGH]   ↑ Revenue surged XX% on Dec 23 (pre-holiday spike)
-  [MEDIUM] ↓ conversion_rate -X.X% vs prior 7-day average
-
-CHANNEL PERFORMANCE
-------------------------------------------------------------------------
-  Channel         Spend      Clicks  Conv    Rev Attr    ROAS
-  Paid Search     $X,XXX     X,XXX   XXX     $XX,XXX     X.XXx
-
-TOP PRODUCTS  (last 7 days by revenue)
-------------------------------------------------------------------------
-  1. Product Name  (Category)  Revenue: $XXX  Units: XX
-
-RECOMMENDED ACTIONS
-------------------------------------------------------------------------
-  1. [AI-generated specific action]
-  2. [AI-generated specific action]
-------------------------------------------------------------------------
-        """.strip()
-        with st.expander("📄 View sample report structure", expanded=True):
-            st.code(sample, language=None)
-
-# ═══════════════════════════════════════════════════════════════════════════
-# TAB 7 — ADVANCED ANALYTICS
-# ═══════════════════════════════════════════════════════════════════════════
-with tab7:
-    st.markdown('<div class="section-header">Advanced Analytics</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="section-sub">'
-        'Forecasting, customer segmentation, and cohort retention — '
-        'three analytical techniques that go beyond dashboards into predictive '
-        'and behavioural intelligence.'
-        '</div>', unsafe_allow_html=True)
-
-    # ── SECTION 1: FORECASTING ──────────────────────────────────────────
-    st.markdown("---")
-    st.markdown('<div class="section-header">🔮 Revenue Forecast</div>', unsafe_allow_html=True)
-
-    with st.expander("📖 What is forecasting and how does Pulse compute it?"):
-        st.markdown(f"""
-        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
-          <strong>What it is:</strong><br>
-          Revenue forecasting uses historical patterns — trend, seasonality, and
-          noise — to predict what revenue is likely to look like in the coming days.
-          It does not guarantee the future; it quantifies the most probable range
-          based on past behaviour.<br><br>
-
-          <strong>How Pulse computes it:</strong><br>
-          Pulse uses <strong>Holt-Winters Exponential Smoothing</strong> — a
-          time-series method that models three components simultaneously:<br>
-          &nbsp;&nbsp;• <em>Level</em> — the current baseline revenue<br>
-          &nbsp;&nbsp;• <em>Trend</em> — whether revenue is growing or declining<br>
-          &nbsp;&nbsp;• <em>Seasonality</em> — repeating weekly patterns (e.g. weekday vs weekend)<br><br>
-          The model is fitted on all 3 years of daily data (1,095 data points),
-          then extrapolated forward. The shaded band shows the 95% confidence
-          interval — the range where actual revenue is expected to fall 95% of the time.<br><br>
-
-          <strong>What to look for:</strong><br>
-          &nbsp;&nbsp;• Is the forecast trending up or down from recent actuals?<br>
-          &nbsp;&nbsp;• How wide is the confidence band? Wider = more uncertainty.<br>
-          &nbsp;&nbsp;• Do the seasonal dips in the forecast match known slow periods?<br><br>
-
-          <strong>Business application:</strong><br>
-          Used in budgeting, inventory planning, marketing spend allocation,
-          and setting realistic revenue targets for stakeholders.
-        </div>""", unsafe_allow_html=True)
-
-    # Forecast controls
-    fc1, fc2 = st.columns([1, 3])
-    with fc1:
-        horizon = st.select_slider(
-            "Forecast horizon",
-            options=[30, 60, 90],
-            value=90,
-            format_func=lambda x: f"{x} days",
-        )
-
-    with st.spinner("Building forecast model..."):
-        try:
-            from analytics.forecasting import build_forecast, forecast_summary
-            forecast_df = build_forecast(horizon_days=horizon)
-            fc_summary  = forecast_summary(forecast_df)
-
-            actual_df = forecast_df[forecast_df["actual"].notna()].copy()
-            future_df = forecast_df[forecast_df["actual"].isna()].copy()
-
-            fig_fc = go.Figure()
-
-            # Confidence band
-            fig_fc.add_trace(go.Scatter(
-                x=pd.concat([future_df["date"], future_df["date"].iloc[::-1]]),
-                y=pd.concat([future_df["upper_ci"], future_df["lower_ci"].iloc[::-1]]),
-                fill="toself",
-                fillcolor="rgba(155,28,28,0.1)",
-                line=dict(color="rgba(0,0,0,0)"),
-                name="95% Confidence Band",
-                showlegend=True,
-            ))
-
-            # Forecast line
-            fig_fc.add_trace(go.Scatter(
-                x=future_df["date"], y=future_df["forecast"],
-                mode="lines", name="Forecast",
-                line=dict(color=CRIMSON, width=2, dash="dash"),
-            ))
-
-            # Actual line (last 90 days for context)
-            recent_actual = actual_df.tail(90)
-            fig_fc.add_trace(go.Scatter(
-                x=recent_actual["date"], y=recent_actual["actual"],
-                mode="lines", name="Actual Revenue",
-                line=dict(color=CHARCOAL, width=2.5),
-            ))
-
-            fig_fc.update_layout(**_base_layout(
-                height=330,
-                x_title="Date",
-                y_title="Revenue (USD)",
-            ))
-            fig_fc.update_yaxes(tickprefix="$")
-            st.plotly_chart(fig_fc, use_container_width=True)
-
-            # Forecast KPI strip
-            kf1, kf2, kf3, kf4 = st.columns(4)
-            for col, label, val in [
-                (kf1, "Last 30d Avg Revenue",   f"${fc_summary['avg_actual_30d']:,.0f}"),
-                (kf2, "Forecast Avg Revenue",   f"${fc_summary['avg_forecast']:,.0f}"),
-                (kf3, "Expected Change",
-                    f"{'▲' if fc_summary['forecast_change_pct']>0 else '▼'} "
-                    f"{abs(fc_summary['forecast_change_pct']):.1f}%"),
-                (kf4, "Forecast Horizon",        f"{fc_summary['forecast_horizon_days']} days"),
-            ]:
-                color = GREEN if "▲" in val else (RED_ACCENT if "▼" in val else TEXT_DARK)
-                with col:
-                    st.markdown(f"""
-                    <div class="kpi-card" style="height:auto;padding:0.75rem 0.95rem;">
-                      <div class="kpi-label">{label}</div>
-                      <div class="kpi-value" style="font-size:1.25rem;color:{color};">{val}</div>
-                    </div>""", unsafe_allow_html=True)
-
-            graph_ai_expander("forecast",
-                f"Revenue forecast for next {horizon} days. "
-                f"Last 30d avg: ${fc_summary['avg_actual_30d']:,.0f}. "
-                f"Forecast avg: ${fc_summary['avg_forecast']:,.0f}. "
-                f"Expected change: {fc_summary['forecast_change_pct']:+.1f}%.",
-                ai_toggle)
-
-        except ImportError:
-            st.warning(
-                "statsmodels is required for forecasting. "
-                "Run `pip install statsmodels` and restart the app."
-            )
-        except Exception as e:
-            st.error(f"Forecasting error: {e}")
-
-    # ── SECTION 2: RFM SEGMENTATION ────────────────────────────────────
-    st.markdown("---")
-    st.markdown('<div class="section-header">👥 Customer Segmentation (RFM)</div>',
-                unsafe_allow_html=True)
-
-    with st.expander("📖 What is RFM segmentation and how does Pulse compute it?"):
-        st.markdown(f"""
-        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
-          <strong>What it is:</strong><br>
-          RFM is a proven framework for ranking and segmenting customers by
-          three behavioural signals:<br>
-          &nbsp;&nbsp;• <strong>Recency (R)</strong> — How many days since their last purchase?
-            Lower = better. A customer who bought yesterday is more valuable than one who bought a year ago.<br>
-          &nbsp;&nbsp;• <strong>Frequency (F)</strong> — How many times have they purchased?
-            Higher = better. Repeat buyers are more loyal and cost less to retain than acquiring new ones.<br>
-          &nbsp;&nbsp;• <strong>Monetary (M)</strong> — How much have they spent in total?
-            Higher = better. High-value customers deserve different treatment than low-value ones.<br><br>
-
-          <strong>How Pulse computes it:</strong><br>
-          Each dimension is scored 1–4 using quartile binning across all
-          {58987:,} customers. Score 4 = best quartile. The three scores are
-          combined into a segment label using standard RFM rules:<br>
-          &nbsp;&nbsp;• <strong>Champions</strong> — R=4, F≥3: bought recently and often<br>
-          &nbsp;&nbsp;• <strong>Loyal</strong> — R≥3, F≥3: consistent buyers<br>
-          &nbsp;&nbsp;• <strong>At Risk</strong> — R≤2, F≥3: used to buy often, haven't recently<br>
-          &nbsp;&nbsp;• <strong>New</strong> — R=4, F=1: bought recently but only once<br>
-          &nbsp;&nbsp;• <strong>Lost</strong> — R≤2, F≤2: low recency and frequency<br><br>
-
-          <strong>What to look for:</strong><br>
-          &nbsp;&nbsp;• What % of revenue comes from Champions vs Lost?<br>
-          &nbsp;&nbsp;• How large is the At Risk segment? These customers are recoverable.<br>
-          &nbsp;&nbsp;• How large is New? This tells you acquisition volume vs retention.<br><br>
-
-          <strong>Business application:</strong><br>
-          Different segments get different campaigns: Champions get VIP rewards,
-          At Risk get win-back offers, New get onboarding sequences,
-          Lost get high-discount reactivation (or are excluded from spend).
-        </div>""", unsafe_allow_html=True)
-
-    with st.spinner("Computing RFM segments..."):
-        try:
-            from analytics.segmentation import (
-                compute_rfm, segment_summary, rfm_summary_for_ai, SEGMENT_META
-            )
-            rfm_df   = compute_rfm()
-            rfm_sum  = segment_summary(rfm_df)
-            rfm_ai   = rfm_summary_for_ai(rfm_df, rfm_sum)
-
-            # Segment summary cards
-            seg_order = ["Champions","Loyal","At Risk","New","Lost"]
-            rfm_sum_ordered = rfm_sum.set_index("segment").reindex(seg_order).reset_index()
-
-            seg_cols = st.columns(5)
-            for col, (_, row) in zip(seg_cols, rfm_sum_ordered.iterrows()):
-                meta = SEGMENT_META.get(row["segment"], {})
-                color = meta.get("color", CRIMSON)
-                st.markdown(f"""
-                <div class="kpi-card" style="height:auto;padding:0.8rem 0.9rem;
-                     border-top:3px solid {color};">
-                  <div style="font-size:1.1rem;">{meta.get('icon','')}</div>
-                  <div class="kpi-label" style="color:{color};">{row['segment']}</div>
-                  <div class="kpi-value" style="font-size:1.3rem;">
-                    {int(row['customer_count']):,}</div>
-                  <div class="kpi-hint">{row['pct_customers']:.1f}% of customers</div>
-                  <div class="kpi-hint">Avg spend: ${row['avg_monetary']:,.0f}</div>
-                  <div style="font-size:0.65rem;color:{TEXT_LIGHT};margin-top:0.3rem;
-                       line-height:1.4;">{meta.get('desc','')}</div>
-                </div>""", unsafe_allow_html=True)
-
-            st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
-
-            # Scatter: Recency vs Frequency, size = Monetary
-            seg_colors_map = {s: SEGMENT_META[s]["color"] for s in SEGMENT_META}
-            # Sample for performance (max 5000 points)
-            rfm_sample = rfm_df.sample(min(5000, len(rfm_df)), random_state=42)
-
-            fig_rfm = go.Figure()
-            for seg in seg_order:
-                sub = rfm_sample[rfm_sample["segment"] == seg]
-                if sub.empty:
-                    continue
-                fig_rfm.add_trace(go.Scatter(
-                    x=sub["recency"],
-                    y=sub["frequency"],
-                    mode="markers",
-                    name=seg,
-                    marker=dict(
-                        size=np.clip(sub["monetary"]/50, 4, 20),
-                        color=SEGMENT_META[seg]["color"],
-                        opacity=0.55,
-                        line=dict(width=0.5, color=WHITE),
-                    ),
-                    customdata=np.stack([
-                        sub["monetary"].round(0),
-                        sub["r_score"],
-                        sub["f_score"],
-                        sub["m_score"],
-                    ], axis=-1),
-                    hovertemplate=(
-                        "<b>%{fullData.name}</b><br>"
-                        "Recency: %{x} days ago<br>"
-                        "Frequency: %{y} purchases<br>"
-                        "Lifetime value: $%{customdata[0]:,.0f}<br>"
-                        "Scores (R/F/M): %{customdata[1]}/%{customdata[2]}/%{customdata[3]}"
-                        "<extra></extra>"
-                    ),
-                ))
-
-            fig_rfm.update_layout(**_base_layout(
-                height=360,
-                x_title="Recency — Days since last purchase (lower = more recent)",
-                y_title="Frequency — Number of purchases",
-            ))
-            fig_rfm.update_layout(
-                legend=dict(orientation="h", yanchor="bottom", y=1.02,
-                            xanchor="left", x=0)
-            )
-            st.plotly_chart(fig_rfm, use_container_width=True)
-            st.caption("Dot size = lifetime monetary value. Hover over any dot for details.")
-
-            graph_ai_expander("rfm_scatter",
-                f"RFM scatter plot. {rfm_ai['total_customers']:,} customers. "
-                f"Champions: {rfm_ai['champions_pct']:.1f}%. "
-                f"At Risk: {rfm_ai['at_risk_count']:,} customers. "
-                f"Lost: {rfm_ai['lost_pct']:.1f}%.",
-                ai_toggle)
-
-        except Exception as e:
-            st.error(f"Segmentation error: {e}")
-
-    # ── SECTION 3: COHORT RETENTION ────────────────────────────────────
-    st.markdown("---")
-    st.markdown('<div class="section-header">🔁 Cohort Retention Analysis</div>',
-                unsafe_allow_html=True)
-
-    with st.expander("📖 What is cohort retention and how does Pulse compute it?"):
-        st.markdown(f"""
-        <div style='font-size:0.85rem;color:{TEXT_DARK};line-height:1.75;'>
-          <strong>What it is:</strong><br>
-          A cohort is a group of customers who made their first purchase in the
-          same calendar month. Cohort retention tracks what percentage of each
-          cohort came back and made another purchase in subsequent months.<br><br>
-
-          <strong>Why it matters:</strong><br>
-          Aggregate metrics like "monthly active users" mask whether growth is
-          coming from new customers or retained ones. Cohort analysis separates
-          these signals. If month-1 retention is declining across recent cohorts,
-          your product or post-purchase experience has a problem — even if total
-          revenue looks fine because you're acquiring more new customers.<br><br>
-
-          <strong>How Pulse computes it:</strong><br>
-          &nbsp;&nbsp;• Month 0 = the signup month (acquisition month)<br>
-          &nbsp;&nbsp;• Month 1 = one calendar month after signup, etc.<br>
-          &nbsp;&nbsp;• Each cell = % of that cohort who made at least one purchase that month<br>
-          &nbsp;&nbsp;• Data source: {36} monthly cohorts from Jan 2021 – Dec 2023<br><br>
-
-          <strong>What to look for:</strong><br>
-          &nbsp;&nbsp;• Darker cells = higher retention. Look for rows that stay darker longer.<br>
-          &nbsp;&nbsp;• Do recent cohorts (bottom rows) retain better or worse than older ones?<br>
-          &nbsp;&nbsp;• Is there a consistent drop-off pattern (e.g. month 2 always loses half)?<br>
-          &nbsp;&nbsp;• Are there any cohorts that spike in a specific month (seasonal repurchase)?<br><br>
-
-          <strong>Business application:</strong><br>
-          Retention curves directly inform LTV (lifetime value) calculations,
-          payback period on customer acquisition cost, and whether loyalty
-          programmes or re-engagement campaigns are working.
-        </div>""", unsafe_allow_html=True)
-
-    with st.spinner("Computing cohort retention matrix..."):
-        try:
-            from analytics.cohort import build_cohort_matrix, cohort_summary_for_ai
-
-            ret_pct, cohort_sizes = build_cohort_matrix()
-            cohort_ai = cohort_summary_for_ai(ret_pct, cohort_sizes)
-
-            # Month range slider
-            max_months = ret_pct.shape[1] - 1
-            ch1, ch2 = st.columns([2, 3])
-            with ch1:
-                show_months = st.slider(
-                    "Show months 0 –",
-                    min_value=6, max_value=max_months,
-                    value=min(12, max_months), step=1,
-                )
-
-            # Trim to selected range
-            ret_display = ret_pct[[c for c in ret_pct.columns if c <= show_months]]
-            z_vals = (ret_display.values * 100).round(1)
-
-            # Replace NaN with None for Plotly
-            z_text = []
-            for row in z_vals:
-                z_text.append([f"{v:.0f}%" if not np.isnan(v) else "" for v in row])
-
-            fig_cohort = go.Figure(go.Heatmap(
-                z=z_vals,
-                x=[f"M{c}" for c in ret_display.columns],
-                y=ret_display.index.tolist(),
-                colorscale=[[0,"#F9FAFB"],[0.5,"#FECACA"],[1, CRIMSON]],
-                text=z_text,
-                texttemplate="%{text}",
-                textfont=dict(size=10, color=TEXT_DARK),
-                hovertemplate=(
-                    "Cohort: %{y}<br>"
-                    "Month since signup: %{x}<br>"
-                    "Retention: %{z:.1f}%<extra></extra>"
-                ),
-                showscale=True,
-                colorbar=dict(
-                    title="Retention %",
-                    thickness=14,
-                    ticksuffix="%",
-                    len=0.8,
-                ),
-                zmin=0, zmax=10,
-            ))
-            fig_cohort.update_layout(
-                height=max(420, len(ret_display)*13),
-                paper_bgcolor=WHITE, plot_bgcolor=WHITE,
-                font=dict(family="DM Sans", size=10, color=TEXT_DARK),
-                margin=dict(l=80, r=60, t=36, b=60),
-                xaxis=dict(
-                    title="Months since first purchase",
-                    title_font=dict(size=11, color=TEXT_MID),
-                    side="bottom",
-                ),
-                yaxis=dict(
-                    title="Cohort (acquisition month)",
-                    title_font=dict(size=11, color=TEXT_MID),
-                    autorange="reversed",
-                ),
-            )
-            st.plotly_chart(fig_cohort, use_container_width=True)
-
-            # Retention KPI strip
-            ck1, ck2, ck3, ck4 = st.columns(4)
-            for col, label, val in [
-                (ck1, "Total Cohorts",          f"{cohort_ai['total_cohorts']}"),
-                (ck2, "Avg Month-1 Retention",  f"{cohort_ai['avg_month1_retention']}%"),
-                (ck3, "Avg Month-3 Retention",  f"{cohort_ai['avg_month3_retention']}%"),
-                (ck4, "Avg Month-6 Retention",  f"{cohort_ai['avg_month6_retention']}%"),
-            ]:
-                with col:
-                    st.markdown(f"""
-                    <div class="kpi-card" style="height:auto;padding:0.75rem 0.95rem;">
-                      <div class="kpi-label">{label}</div>
-                      <div class="kpi-value" style="font-size:1.25rem;">{val}</div>
-                    </div>""", unsafe_allow_html=True)
-
-            # Retention curve — average across all cohorts
-            st.markdown('<div class="section-header" style="margin-top:1rem;">'
-                        'Average Retention Curve</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<div class="section-sub">Average % of customers retained across all cohorts '
-                'by months since first purchase.</div>', unsafe_allow_html=True)
-
-            avg_retention = ret_display.mean(axis=0) * 100
-            fig_curve = go.Figure()
-            fig_curve.add_trace(go.Scatter(
-                x=[f"M{c}" for c in avg_retention.index],
-                y=avg_retention.values,
-                mode="lines+markers",
-                name="Avg Retention",
-                line=dict(color=CRIMSON, width=2.5),
-                marker=dict(size=6, color=CRIMSON),
-                fill="tozeroy",
-                fillcolor="rgba(155,28,28,0.07)",
-            ))
-            fig_curve.update_layout(**_base_layout(
-                height=260,
-                x_title="Months since first purchase",
-                y_title="Avg Retention (%)",
-            ))
-            fig_curve.update_yaxes(ticksuffix="%")
-            st.plotly_chart(fig_curve, use_container_width=True)
-
-            graph_ai_expander("cohort",
-                f"Cohort retention. {cohort_ai['total_cohorts']} monthly cohorts. "
-                f"Avg month-1 retention: {cohort_ai['avg_month1_retention']}%. "
-                f"Avg month-3: {cohort_ai['avg_month3_retention']}%. "
-                f"Avg month-6: {cohort_ai['avg_month6_retention']}%. "
-                f"58% of customers only purchase once (low repeat rate is key finding).",
-                ai_toggle)
-
-        except Exception as e:
-            st.error(f"Cohort analysis error: {e}")
+# ── Redirect to home ─────────────────────────────────────────────────────────
+st.switch_page("pages/1_home.py")
