@@ -556,4 +556,4 @@ st.session_state["gemini_key"]  = gemini_key
 st.session_state["ai_on"]       = ai_on
 
 # ── Redirect to home ─────────────────────────────────────────────────────────
-st.switch_page("pages/1_home.py")
+st.switch_page("app/pages/1_home.py")
