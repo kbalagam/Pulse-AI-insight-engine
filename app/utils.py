@@ -70,5 +70,6 @@ header[data-testid="stHeader"] {
 @media (max-width:1280px) { .kpi-card { height:120px !important; padding:0.85rem 1rem !important; } .block-container { padding-left:1rem !important; padding-right:1rem !important; } }
 @media (max-width:1024px) { .kpi-card { height:115px !important; } .home-hero-title { font-size:1.5rem !important; } .arch-desc { font-size:0.72rem !important; } }
 @media (max-width:900px) { .kpi-card { height:auto !important; min-height:100px; } .kpi-value { font-size:1.1rem !important; } .page-title { font-size:1.1rem !important; } .home-hero-title { font-size:1.3rem !important; } .ai-strip { font-size:0.75rem !important; } }
+section[data-testid="stSidebarNav"] li:first-child { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
