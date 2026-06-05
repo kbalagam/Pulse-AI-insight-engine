@@ -5,6 +5,9 @@ secondaryBackgroundColor = "#FFFFFF"
 textColor = "#111827"
 primaryColor = "#9B1C1C"
 
+[client]
+showSidebarNavigation = true
+
 [server]
 headless = true
 enableCORS = false
