@@ -12,6 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from utils import inject_styles
+inject_styles()
 
 from analytics.forecasting import build_forecast, forecast_summary
 from analytics.metrics import (
