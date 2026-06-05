@@ -555,5 +555,8 @@ st.session_state["top_n"]       = int(top_n)
 st.session_state["gemini_key"]  = gemini_key
 st.session_state["ai_on"]       = ai_on
 
-# ── Redirect to home ─────────────────────────────────────────────────────────
-st.switch_page("pages/1_home.py")
+# ── Landing content ───────────────────────────────────────────────────────────
+st.markdown("""
+<div class="page-title">Welcome to Pulse</div>
+<div class="page-sub">Select a page from the sidebar to get started.</div>
+""", unsafe_allow_html=True)
