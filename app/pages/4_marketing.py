@@ -11,7 +11,9 @@ import numpy as np
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+APP  = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(APP))
 from utils import inject_styles
 inject_styles()
 
