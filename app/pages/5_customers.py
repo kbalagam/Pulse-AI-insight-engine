@@ -13,6 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from utils import inject_styles
+inject_styles()
 
 from analytics.segmentation import compute_rfm, segment_summary, rfm_summary_for_ai
 from analytics.cohort import build_cohort_matrix, cohort_summary_for_ai
