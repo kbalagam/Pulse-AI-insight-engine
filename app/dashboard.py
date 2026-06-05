@@ -1,16 +1,19 @@
 """
 Pulse — AI Insight Engine
-Entry point and shared configuration.
+Entry point, shared configuration, and home page.
 Run with: streamlit run app/dashboard.py
 """
 
 import os
 import sys
+import datetime
 import streamlit as st
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+APP  = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(APP))
 
 st.set_page_config(
     page_title="Pulse — AI Insight Engine",
@@ -19,499 +22,75 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+from utils import inject_styles
+inject_styles()
 
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif !important;
-}
+# ── Constants ─────────────────────────────────────────────────────────────────
+DATA_MIN = datetime.date(2021, 1, 1)
+DATA_MAX = datetime.date(2023, 12, 31)
 
-.block-container {
-    padding-top: 1.5rem !important;
-    padding-bottom: 2rem !important;
-    max-width: 100% !important;
-}
-
-/* ── Sidebar ── */
-section[data-testid="stSidebar"] {
-    background: #111827 !important;
-    border-right: 1px solid rgba(255,255,255,0.06) !important;
-}
-section[data-testid="stSidebar"] > div {
-    background: #111827 !important;
-}
-section[data-testid="stSidebarNav"] a:first-child {
-    display: none !important;
-}
-section[data-testid="stSidebar"] * {
-    color: #D1D5DB !important;
-}
-section[data-testid="stSidebar"] .stSelectbox > div,
-section[data-testid="stSidebar"] .stTextInput input {
-    background: rgba(255,255,255,0.07) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
-    border-radius: 8px !important;
-    color: #F9FAFB !important;
-    font-size: 0.8rem !important;
-}
-section[data-testid="stSidebar"] label {
-    color: #9CA3AF !important;
-    font-size: 0.68rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.07em !important;
-}
-section[data-testid="stSidebar"] hr {
-    border-color: rgba(255,255,255,0.08) !important;
-    margin: 0.6rem 0 !important;
-}
-section[data-testid="stSidebar"] .stButton > button {
-    background: #1D4ED8 !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.8rem !important;
-    width: 100% !important;
-    padding: 0.5rem !important;
-}
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #1E40AF !important;
-}
-
-/* ── Sidebar nav ── */
-section[data-testid="stSidebarNav"] {
-    padding-top: 0 !important;
-}
-section[data-testid="stSidebarNav"] a {
-    font-size: 0.82rem !important;
-    font-weight: 400 !important;
-    color: #9CA3AF !important;
-    padding: 0.4rem 0.8rem !important;
-    border-radius: 6px !important;
-}
-section[data-testid="stSidebarNav"] a:hover {
-    background: rgba(255,255,255,0.06) !important;
-    color: #F9FAFB !important;
-}
-section[data-testid="stSidebarNav"] a[aria-selected="true"] {
-    background: rgba(255,255,255,0.1) !important;
-    color: #F9FAFB !important;
-    font-weight: 500 !important;
-}
-
-/* ── KPI cards ── */
-.kpi-card {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 1rem 1.1rem;
-    height: 130px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-.kpi-label {
-    font-size: clamp(0.58rem, 0.9vw, 0.65rem);
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-.kpi-value {
-    font-size: clamp(1.1rem, 2vw, 1.45rem);
-    font-weight: 600;
-    color: #111827;
-    line-height: 1.2;
-}
-.kpi-delta-up {
-    display: inline-block;
-    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
-    font-weight: 600;
-    color: #15803D;
-    background: #DCFCE7;
-    padding: 2px 8px;
-    border-radius: 20px;
-}
-.kpi-delta-down {
-    display: inline-block;
-    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
-    font-weight: 600;
-    color: #B91C1C;
-    background: #FEE2E2;
-    padding: 2px 8px;
-    border-radius: 20px;
-}
-.kpi-delta-neu {
-    display: inline-block;
-    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
-    font-weight: 600;
-    color: #6B7280;
-    background: #F3F4F6;
-    padding: 2px 8px;
-    border-radius: 20px;
-}
-.kpi-hint {
-    font-size: clamp(0.58rem, 0.8vw, 0.63rem);
-    color: #9CA3AF;
-    margin-top: 2px;
-}
-
-/* ── Section headers ── */
-.section-header {
-    font-size: clamp(0.68rem, 1vw, 0.75rem);
-    font-weight: 600;
-    color: #374151;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    padding-bottom: 0.5rem;
-    border-bottom: 0.5px solid #E5E7EB;
-    margin-bottom: 0.8rem;
-    margin-top: 0.5rem;
-}
-
-/* ── Page title ── */
-.page-title {
-    font-size: clamp(1.1rem, 2.5vw, 1.3rem);
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 0.15rem;
-}
-.page-sub {
-    font-size: clamp(0.7rem, 1.2vw, 0.78rem);
-    color: #9CA3AF;
-    margin-bottom: 1.2rem;
-}
-
-/* ── AI strip ── */
-.ai-strip {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-left: 3px solid #1D4ED8;
-    border-radius: 0 10px 10px 0;
-    padding: 0.85rem 1.1rem;
-    font-size: clamp(0.75rem, 1.2vw, 0.83rem);
-    color: #374151;
-    line-height: 1.7;
-    margin-bottom: 1.2rem;
-}
-.ai-strip-label {
-    font-size: clamp(0.58rem, 0.9vw, 0.62rem);
-    font-weight: 600;
-    color: #1D4ED8;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.3rem;
-}
-.ai-placeholder {
-    background: #F9FAFB;
-    border: 1px dashed #E5E7EB;
-    border-radius: 10px;
-    padding: 0.75rem 1rem;
-    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
-    color: #9CA3AF;
-    margin-bottom: 1.2rem;
-    text-align: center;
-}
-
-/* ── Chart card ── */
-.chart-card {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 1rem 1.1rem 0.5rem;
-}
-.chart-title {
-    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 0.15rem;
-}
-.chart-sub {
-    font-size: clamp(0.65rem, 1vw, 0.72rem);
-    color: #9CA3AF;
-    margin-bottom: 0.6rem;
-}
-
-/* ── AI insight expander ── */
-.ai-insight-box {
-    background: #F8FAFF;
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
-    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
-    color: #374151;
-    line-height: 1.65;
-    margin-top: 0.3rem;
-}
-
-/* ── Tables ── */
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
-}
-.data-table th {
-    font-size: clamp(0.58rem, 0.9vw, 0.63rem);
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    padding: 0 0 0.5rem;
-    border-bottom: 0.5px solid #E5E7EB;
-    text-align: left;
-}
-.data-table th.right, .data-table td.right {
-    text-align: right;
-}
-.data-table td {
-    padding: 0.5rem 0;
-    color: #374151;
-    border-bottom: 0.5px solid #F3F4F6;
-}
-.data-table tr:last-child td {
-    border-bottom: none;
-}
-.td-good { color: #15803D; font-weight: 500; }
-.td-bad  { color: #B91C1C; font-weight: 500; }
-.td-bold { font-weight: 500; color: #111827; }
-
-/* ── Badges ── */
-.badge-up   { background:#DCFCE7; color:#15803D; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
-.badge-down { background:#FEE2E2; color:#B91C1C; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
-.badge-warn { background:#FEF3C7; color:#92400E; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
-.badge-neu  { background:#F3F4F6; color:#6B7280; font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; padding:2px 8px; border-radius:20px; white-space:nowrap; }
-
-/* ── Home page specific ── */
-.home-hero-title {
-    font-size: clamp(1.4rem, 3vw, 2rem);
-    font-weight: 600;
-    color: #111827;
-    line-height: 1.3;
-    margin-bottom: 0.6rem;
-}
-.home-hero-body {
-    font-size: clamp(0.8rem, 1.3vw, 0.92rem);
-    color: #6B7280;
-    line-height: 1.75;
-    max-width: 680px;
-}
-.home-section-tag {
-    font-size: clamp(0.6rem, 0.9vw, 0.68rem);
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    padding-bottom: 0.5rem;
-    border-bottom: 0.5px solid #E5E7EB;
-    margin-bottom: 1rem;
-    margin-top: 2rem;
-}
-.q-card {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 1rem 1.1rem;
-    height: 100%;
-}
-.q-num {
-    font-size: 0.62rem;
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.4rem;
-}
-.q-question {
-    font-size: clamp(0.78rem, 1.2vw, 0.88rem);
-    font-weight: 600;
-    color: #111827;
-    line-height: 1.4;
-    margin-bottom: 0.4rem;
-}
-.q-answer {
-    font-size: clamp(0.7rem, 1.1vw, 0.78rem);
-    color: #6B7280;
-    line-height: 1.6;
-}
-.wf-card {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 1rem 1.1rem;
-    height: 100%;
-}
-.wf-step-num {
-    font-size: 0.6rem;
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.35rem;
-}
-.wf-step-title {
-    font-size: clamp(0.78rem, 1.2vw, 0.86rem);
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 0.35rem;
-}
-.wf-step-desc {
-    font-size: clamp(0.68rem, 1vw, 0.76rem);
-    color: #6B7280;
-    line-height: 1.6;
-    margin-bottom: 0.6rem;
-}
-.wf-file {
-    display: inline-block;
-    font-size: 0.68rem;
-    font-family: 'Courier New', monospace;
-    padding: 2px 8px;
-    border-radius: 6px;
-    background: #F3F4F6;
-    color: #374151;
-    border: 0.5px solid #E5E7EB;
-}
-.arch-card {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 12px;
-    padding: 1rem 1.1rem;
-    height: 100%;
-}
-.arch-icon-wrap {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
-    margin-bottom: 0.6rem;
-}
-.arch-title {
-    font-size: clamp(0.78rem, 1.2vw, 0.86rem);
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 0.4rem;
-}
-.arch-desc {
-    font-size: clamp(0.68rem, 1vw, 0.76rem);
-    color: #6B7280;
-    line-height: 1.65;
-    margin-bottom: 0.6rem;
-}
-.arch-files {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-.arch-file {
-    font-size: 0.65rem;
-    font-family: 'Courier New', monospace;
-    padding: 2px 7px;
-    border-radius: 5px;
-    background: #F3F4F6;
-    color: #374151;
-    border: 0.5px solid #E5E7EB;
-}
-.stack-cell {
-    background: #FFFFFF;
-    border: 0.5px solid #E5E7EB;
-    border-radius: 10px;
-    padding: 0.75rem 0.9rem;
-    text-align: center;
-}
-.stack-layer {
-    font-size: 0.6rem;
-    font-weight: 600;
-    color: #9CA3AF;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.25rem;
-}
-.stack-tool {
-    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
-    font-weight: 600;
-    color: #111827;
-}
-.home-note {
-    font-size: clamp(0.68rem, 1vw, 0.76rem);
-    color: #9CA3AF;
-    line-height: 1.65;
-    font-style: italic;
-    margin-top: 0.75rem;
-}
-
-/* ── Anomaly master-detail ── */
-.anomaly-log-item {
-    padding: 0.7rem 0.9rem;
-    border-bottom: 0.5px solid #F3F4F6;
-    cursor: pointer;
-    border-radius: 8px;
-    margin-bottom: 2px;
-}
-.anomaly-log-item:hover {
-    background: #F9FAFB;
-}
-.anomaly-log-metric {
-    font-size: clamp(0.72rem, 1.1vw, 0.8rem);
-    font-weight: 600;
-    color: #111827;
-    margin-bottom: 2px;
-}
-.anomaly-log-date {
-    font-size: clamp(0.62rem, 0.9vw, 0.68rem);
-    color: #9CA3AF;
-}
-.anomaly-log-type {
-    font-size: clamp(0.62rem, 0.9vw, 0.68rem);
-    color: #6B7280;
-    margin-top: 2px;
-}
-
-/* ── Responsive breakpoints ── */
-@media (max-width: 1280px) {
-    .kpi-card { height: 120px !important; padding: 0.85rem 1rem !important; }
-    .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
-}
-@media (max-width: 1024px) {
-    .kpi-card { height: 115px !important; }
-    .home-hero-title { font-size: 1.5rem !important; }
-    .arch-desc { font-size: 0.72rem !important; }
-}
-@media (max-width: 900px) {
-    .kpi-card { height: auto !important; min-height: 100px; }
-    .kpi-value { font-size: 1.1rem !important; }
-    .page-title { font-size: 1.1rem !important; }
-    .home-hero-title { font-size: 1.3rem !important; }
-    .ai-strip { font-size: 0.75rem !important; }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ── Sidebar ──────────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+
+    # Brand
     st.markdown("""
-    <div style="padding: 0.2rem 0 1rem;">
-        <div style="font-size:1.05rem; font-weight:600; color:#F9FAFB; letter-spacing:-0.01em;">Pulse</div>
-        <div style="font-size:0.72rem; color:#6B7280; margin-top:2px;">AI insight engine</div>
+    <div style="padding:0.4rem 0 1rem;">
+        <div style="font-size:1.1rem; font-weight:600; color:#F1F5F9;
+                    letter-spacing:-0.01em;">Pulse</div>
+        <div style="font-size:0.72rem; color:#64748B; margin-top:2px;">
+            AI insight engine
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
 
+    # ── Date window ───────────────────────────────────────────────────────────
     st.markdown("""
-    <div style="font-size:0.65rem; font-weight:600; color:#6B7280;
-    text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.4rem;">
-    Controls
+    <div style="font-size:0.65rem; font-weight:600; color:#64748B;
+    text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">
+    Date window
     </div>
     """, unsafe_allow_html=True)
 
-    date_window = st.selectbox(
+    preset = st.radio(
         "Date window",
-        ["Last 7 days", "Last 14 days", "Last 30 days", "Last 90 days"],
-        index=0,
+        ["7d", "14d", "30d", "90d", "Custom"],
+        index=2,
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
+    if preset != "Custom":
+        days_map   = {"7d": 7, "14d": 14, "30d": 30, "90d": 90}
+        end_date   = DATA_MAX
+        start_date = end_date - datetime.timedelta(days=days_map[preset] - 1)
+    else:
+        date_range = st.date_input(
+            "Select range",
+            value=(DATA_MAX - datetime.timedelta(days=29), DATA_MAX),
+            min_value=DATA_MIN,
+            max_value=DATA_MAX,
+            label_visibility="collapsed",
+        )
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            start_date, end_date = date_range
+        else:
+            start_date = DATA_MAX - datetime.timedelta(days=29)
+            end_date   = DATA_MAX
+
+    days = (end_date - start_date).days + 1
+
+    st.markdown(
+        f"<div style='font-size:0.68rem; color:#64748B; margin-top:0.3rem;'>"
+        f"{start_date.strftime('%b %d, %Y')} — {end_date.strftime('%b %d, %Y')} "
+        f"<span style='color:#475569;'>({days}d)</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+    # ── Top N ─────────────────────────────────────────────────────────────────
     top_n = st.selectbox(
         "Top N products",
         [5, 10, 20],
@@ -520,8 +99,9 @@ with st.sidebar:
 
     st.markdown("---")
 
+    # ── Gemini API key ────────────────────────────────────────────────────────
     st.markdown("""
-    <div style="font-size:0.65rem; font-weight:600; color:#6B7280;
+    <div style="font-size:0.65rem; font-weight:600; color:#64748B;
     text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.4rem;">
     Gemini API key
     </div>
@@ -543,7 +123,7 @@ with st.sidebar:
         """, unsafe_allow_html=True)
     else:
         st.markdown("""
-        <div style="font-size:0.7rem; color:#6B7280; margin-top:0.3rem;">
+        <div style="font-size:0.7rem; color:#64748B; margin-top:0.3rem;">
         Get a free key at aistudio.google.com
         </div>
         """, unsafe_allow_html=True)
@@ -552,14 +132,174 @@ with st.sidebar:
 
     ai_on = st.toggle("Show AI insights on charts", value=False)
 
-# ── Persist to session state ─────────────────────────────────────────────────
-st.session_state["date_window"] = date_window
+# ── Persist to session state ──────────────────────────────────────────────────
+st.session_state["start_date"]  = start_date
+st.session_state["end_date"]    = end_date
+st.session_state["days"]        = days
 st.session_state["top_n"]       = int(top_n)
 st.session_state["gemini_key"]  = gemini_key
 st.session_state["ai_on"]       = ai_on
 
-# ── Landing content ───────────────────────────────────────────────────────────
+# ── Home page content ─────────────────────────────────────────────────────────
+
 st.markdown("""
-<div class="page-title">Welcome to Pulse</div>
-<div class="page-sub">Select a page from the sidebar to get started.</div>
+<div class="home-hero-title">An AI-powered revenue and<br>marketing insight engine</div>
+<div class="home-hero-body">
+Pulse connects raw e-commerce data to plain-English decisions. It tracks daily KPIs,
+detects statistical anomalies, segments customers by behaviour, forecasts revenue, and
+uses Gemini to explain what changed, why it changed, and what to do next —
+without manual analysis.
+</div>
+""", unsafe_allow_html=True)
+
+# ── Three questions ───────────────────────────────────────────────────────────
+st.markdown('<div class="home-section-tag">Three questions this dashboard answers</div>',
+            unsafe_allow_html=True)
+
+c1, c2, c3 = st.columns(3, gap="small")
+with c1:
+    st.markdown("""
+    <div class="q-card">
+        <div class="q-num">Question 1</div>
+        <div class="q-question">What changed in our key metrics?</div>
+        <div class="q-answer">Daily KPIs tracked with week-over-week comparison,
+        rolling averages, and automatic anomaly flags across revenue, CAC, ROAS,
+        AOV, and conversion rate.</div>
+    </div>
+    """, unsafe_allow_html=True)
+with c2:
+    st.markdown("""
+    <div class="q-card">
+        <div class="q-num">Question 2</div>
+        <div class="q-question">Why did it change?</div>
+        <div class="q-answer">Statistical root-cause detection across channels,
+        products, and customer cohorts — with AI-generated explanations grounded
+        in your actual numbers, not generic advice.</div>
+    </div>
+    """, unsafe_allow_html=True)
+with c3:
+    st.markdown("""
+    <div class="q-card">
+        <div class="q-num">Question 3</div>
+        <div class="q-question">What should we do next?</div>
+        <div class="q-answer">Gemini-generated recommendations prioritised by
+        business impact — specific, actionable, and tied directly to the metrics
+        that triggered them.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ── Workflow ──────────────────────────────────────────────────────────────────
+st.markdown('<div class="home-section-tag">How data flows through the system</div>',
+            unsafe_allow_html=True)
+
+steps = [
+    ("Step 1", "Ingest",
+     "Five raw CSV files are loaded — transactions, customers, events, campaigns, "
+     "and products. Types are enforced and dates are parsed at this stage.",
+     "loader.py"),
+    ("Step 2", "Clean",
+     "Refunded transactions are removed, nulls are handled with explicit rules, "
+     "channel names are normalised, and organic traffic is labelled consistently.",
+     "cleaner.py"),
+    ("Step 3", "Transform",
+     "Four analytical Parquet tables are built — daily metrics, product sales, "
+     "marketing channel, and events — each with a clear grain and purpose.",
+     "transformer.py"),
+    ("Step 4", "Analyse",
+     "Rolling statistics, week-over-week change, Z-score anomaly detection, RFM "
+     "customer scoring, cohort retention, and a 90-day Holt-Winters forecast are computed.",
+     "analytics/"),
+    ("Step 5", "Narrate",
+     "Rule-based insights are structured first, then passed to Gemini 2.0 Flash. "
+     "The AI receives context and findings — not raw data — keeping output focused "
+     "and consistent.",
+     "gemini.py"),
+]
+
+cols = st.columns(5, gap="small")
+for col, (num, title, desc, file) in zip(cols, steps):
+    with col:
+        st.markdown(f"""
+        <div class="wf-card">
+            <div class="wf-step-num">{num}</div>
+            <div class="wf-step-title">{title}</div>
+            <div class="wf-step-desc">{desc}</div>
+            <span class="wf-file">{file}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ── Architecture ──────────────────────────────────────────────────────────────
+st.markdown('<div class="home-section-tag">Architecture — what each layer does</div>',
+            unsafe_allow_html=True)
+
+arch = [
+    ("🗄", "#E1F5EE", "ETL pipeline",
+     "Loads raw CSVs, enforces business rules and data types, then writes four "
+     "analytical Parquet tables to disk. Runs once locally; outputs are committed "
+     "and read directly by the dashboard on Streamlit Cloud.",
+     ["loader.py", "cleaner.py", "transformer.py", "pipeline.py"]),
+    ("📊", "#EEEDFE", "Analytics engine",
+     "Computes all metrics and statistical signals — rolling averages, WoW change, "
+     "anomaly detection with configurable thresholds, RFM quartile scoring, cohort "
+     "retention matrices, and time-series forecasting.",
+     ["metrics.py", "anomaly.py", "segmentation.py", "forecasting.py", "cohort.py"]),
+    ("🧠", "#FAEEDA", "AI layer",
+     "Insights are structured by rule-based logic before reaching the AI. Gemini "
+     "2.0 Flash is called via direct REST — no SDK dependency — with tightly scoped "
+     "prompts for narrative, anomaly explanation, and recommendations.",
+     ["gemini.py", "insights.py"]),
+    ("📋", "#E6F1FB", "Dashboard",
+     "Seven-page Streamlit app with Plotly charts, per-chart AI insights, an anomaly "
+     "investigation view, RFM and cohort analysis, a 90-day forecast, and an "
+     "exportable daily report with AI narrative.",
+     ["dashboard.py", "daily_report.py"]),
+]
+
+a1, a2 = st.columns(2, gap="small")
+for i, (icon, bg, title, desc, files) in enumerate(arch):
+    col = a1 if i % 2 == 0 else a2
+    with col:
+        files_html = "".join(f'<span class="arch-file">{f}</span>' for f in files)
+        st.markdown(f"""
+        <div class="arch-card">
+            <div class="arch-icon-wrap" style="background:{bg};">
+                <span style="font-size:0.9rem;">{icon}</span>
+            </div>
+            <div class="arch-title">{title}</div>
+            <div class="arch-desc">{desc}</div>
+            <div class="arch-files">{files_html}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ── Tech stack ────────────────────────────────────────────────────────────────
+st.markdown('<div class="home-section-tag">Tech stack</div>', unsafe_allow_html=True)
+
+stack = [
+    ("Processing",  "pandas · NumPy"),
+    ("Storage",     "Parquet · pyarrow"),
+    ("Forecasting", "statsmodels"),
+    ("AI",          "Gemini 2.0 Flash"),
+    ("Frontend",    "Streamlit"),
+    ("Charts",      "Plotly"),
+    ("Language",    "Python 3.11"),
+    ("Hosting",     "Streamlit Cloud"),
+]
+
+s_cols = st.columns(4, gap="small")
+for i, (layer, tool) in enumerate(stack):
+    with s_cols[i % 4]:
+        st.markdown(f"""
+        <div class="stack-cell" style="margin-bottom:0.5rem;">
+            <div class="stack-layer">{layer}</div>
+            <div class="stack-tool">{tool}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ── Footer note ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="home-note">
+No API key is required to explore the dashboard — all analytics run locally on
+the processed data. Add a free Gemini API key in the sidebar to unlock AI
+summaries, anomaly explanations, and report generation.
+</div>
 """, unsafe_allow_html=True)
