@@ -5,7 +5,17 @@ def inject_styles():
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; }
-.block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; max-width: 100% !important; }
+.block-container {
+    padding-top: 0.5rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 100% !important;
+}
+[data-testid="stAppViewContainer"] > section {
+    padding-top: 0 !important;
+}
+div[data-testid="stVerticalBlock"] {
+    gap: 0.5rem !important;
+}
 .kpi-card { background:#FFFFFF; border:0.5px solid #E5E7EB; border-radius:12px; padding:1rem 1.1rem; height:130px; display:flex; flex-direction:column; justify-content:space-between; }
 .kpi-label { font-size:clamp(0.58rem,0.9vw,0.65rem); font-weight:600; color:#9CA3AF; text-transform:uppercase; letter-spacing:0.08em; }
 .kpi-value { font-size:clamp(1.1rem,2vw,1.45rem); font-weight:600; color:#111827; line-height:1.2; }
