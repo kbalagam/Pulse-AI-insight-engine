@@ -41,6 +41,9 @@ section[data-testid="stSidebar"] {
 section[data-testid="stSidebar"] > div {
     background: #111827 !important;
 }
+section[data-testid="stSidebarNav"] a:first-child {
+    display: none !important;
+}
 section[data-testid="stSidebar"] * {
     color: #D1D5DB !important;
 }
