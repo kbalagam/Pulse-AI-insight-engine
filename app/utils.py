@@ -21,12 +21,12 @@ header[data-testid="stHeader"] { display: none !important; }
 section[data-testid="stSidebar"],
 section[data-testid="stSidebar"] > div,
 section[data-testid="stSidebar"] > div > div,
-section[data-testdata="stSidebar"] > div > div > div {
-    background: #0F172A !important;
+section[data-testid="stSidebar"] > div > div > div {
+    background: #FFFFFF !important;
 }
-section[data-testid="stSidebar"] * { color: #94A3B8 !important; }
+section[data-testid="stSidebar"] * { color: #374151 !important; }
 
-/* ── Kill ALL white backgrounds in sidebar ── */
+/* ── Kill ALL white/colored backgrounds on sidebar widgets ── */
 section[data-testid="stSidebar"] .stRadio,
 section[data-testid="stSidebar"] .stRadio > div,
 section[data-testid="stSidebar"] .stRadio > div > div,
@@ -54,13 +54,12 @@ section[data-testid="stSidebar"] [role="radiogroup"] > div {
     background-color: transparent !important;
 }
 
-/* ── Hide default radio circles entirely ── */
-section[data-testid="stSidebar"] [data-baseweb="radio"] [data-testid="stMarkdownContainer"] ~ div,
+/* ── Hide default radio circles ── */
 section[data-testid="stSidebar"] input[type="radio"] {
     display: none !important;
 }
 
-/* ── Radio group — pill button layout ── */
+/* ── Radio group — pill buttons ── */
 section[data-testid="stSidebar"] [role="radiogroup"] {
     display: flex !important;
     flex-wrap: wrap !important;
@@ -77,23 +76,23 @@ section[data-testid="stSidebar"] [role="radiogroup"] label {
     font-size: 0.72rem !important;
     font-weight: 500 !important;
     cursor: pointer !important;
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    color: #94A3B8 !important;
+    background: #F3F4F6 !important;
+    border: 1px solid #E5E7EB !important;
+    color: #6B7280 !important;
     transition: all 0.15s ease !important;
     white-space: nowrap !important;
 }
 section[data-testid="stSidebar"] [role="radiogroup"] label:hover {
-    background: rgba(59,130,246,0.2) !important;
+    background: #EFF6FF !important;
     border-color: #3B82F6 !important;
-    color: #E2E8F0 !important;
+    color: #1D4ED8 !important;
 }
 section[data-testid="stSidebar"] [role="radiogroup"] label[data-checked="true"],
 section[data-testid="stSidebar"] [role="radiogroup"] [aria-checked="true"] label,
 section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-    background: #1E3A5F !important;
-    border-color: #3B82F6 !important;
-    color: #F1F5F9 !important;
+    background: #1D4ED8 !important;
+    border-color: #1D4ED8 !important;
+    color: #FFFFFF !important;
     font-weight: 600 !important;
 }
 
@@ -101,26 +100,26 @@ section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
 section[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div,
 section[data-testid="stSidebar"] .stTextInput > div > div,
 section[data-testid="stSidebar"] .stDateInput input {
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: #F9FAFB !important;
+    border: 1px solid #E5E7EB !important;
     border-radius: 8px !important;
-    color: #F1F5F9 !important;
+    color: #111827 !important;
     font-size: 0.8rem !important;
 }
 section[data-testid="stSidebar"] .stTextInput input::placeholder {
-    color: #475569 !important;
+    color: #9CA3AF !important;
 }
 
 /* ── Toggle ── */
 section[data-testid="stSidebar"] .stToggle p {
-    color: #94A3B8 !important;
+    color: #374151 !important;
     font-size: 0.78rem !important;
 }
 
 /* ── Labels ── */
 section[data-testid="stSidebar"] label p,
 section[data-testid="stSidebar"] .stSelectbox label {
-    color: #64748B !important;
+    color: #9CA3AF !important;
     font-size: 0.68rem !important;
     font-weight: 600 !important;
     text-transform: uppercase !important;
@@ -129,11 +128,11 @@ section[data-testid="stSidebar"] .stSelectbox label {
 
 /* ── Dividers ── */
 section[data-testid="stSidebar"] hr {
-    border-color: rgba(255,255,255,0.07) !important;
+    border-color: #E5E7EB !important;
     margin: 0.6rem 0 !important;
 }
 
-/* ── Nav ── */
+/* ── Nav — hide scroll gradients ── */
 section[data-testid="stSidebarNav"] {
     padding-top: 0 !important;
     overflow: visible !important;
@@ -154,25 +153,26 @@ section[data-testid="stSidebarNav"] > ul::after {
 }
 [data-testid="stSidebarNavSeparator"] { display: none !important; }
 
+/* ── Nav links ── */
 section[data-testid="stSidebarNav"] a {
     font-size: 0.82rem !important;
     font-weight: 400 !important;
-    color: #94A3B8 !important;
+    color: #6B7280 !important;
     padding: 0.45rem 0.9rem !important;
     border-radius: 6px !important;
     border-left: 2px solid transparent !important;
     display: block !important;
 }
 section[data-testid="stSidebarNav"] a:hover {
-    background: rgba(30,58,95,0.4) !important;
-    color: #E2E8F0 !important;
+    background: #EFF6FF !important;
+    color: #1D4ED8 !important;
     border-left: 2px solid #3B82F6 !important;
 }
 section[data-testid="stSidebarNav"] a[aria-selected="true"] {
-    background: rgba(30,58,95,0.6) !important;
-    color: #F1F5F9 !important;
+    background: #EFF6FF !important;
+    color: #1D4ED8 !important;
     font-weight: 600 !important;
-    border-left: 2px solid #3B82F6 !important;
+    border-left: 2px solid #1D4ED8 !important;
 }
 
 /* ── KPI cards ── */
@@ -186,8 +186,8 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 .section-header { font-size:clamp(0.68rem,1vw,0.75rem); font-weight:600; color:#374151; text-transform:uppercase; letter-spacing:0.07em; padding-bottom:0.5rem; border-bottom:0.5px solid #E5E7EB; margin-bottom:0.8rem; margin-top:0.5rem; }
 .page-title { font-size:clamp(1.1rem,2.5vw,1.3rem); font-weight:600; color:#111827; margin-bottom:0.15rem; }
 .page-sub { font-size:clamp(0.7rem,1.2vw,0.78rem); color:#9CA3AF; margin-bottom:1.2rem; }
-.ai-strip { background:#FFFFFF; border:0.5px solid #E5E7EB; border-left:3px solid #1E3A5F; border-radius:0 10px 10px 0; padding:0.85rem 1.1rem; font-size:clamp(0.75rem,1.2vw,0.83rem); color:#374151; line-height:1.7; margin-bottom:1.2rem; }
-.ai-strip-label { font-size:clamp(0.58rem,0.9vw,0.62rem); font-weight:600; color:#1E3A5F; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.3rem; }
+.ai-strip { background:#FFFFFF; border:0.5px solid #E5E7EB; border-left:3px solid #1D4ED8; border-radius:0 10px 10px 0; padding:0.85rem 1.1rem; font-size:clamp(0.75rem,1.2vw,0.83rem); color:#374151; line-height:1.7; margin-bottom:1.2rem; }
+.ai-strip-label { font-size:clamp(0.58rem,0.9vw,0.62rem); font-weight:600; color:#1D4ED8; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.3rem; }
 .ai-placeholder { background:#F9FAFB; border:1px dashed #E5E7EB; border-radius:10px; padding:0.75rem 1rem; font-size:clamp(0.7rem,1.1vw,0.78rem); color:#9CA3AF; margin-bottom:1.2rem; text-align:center; }
 .chart-title { font-size:clamp(0.72rem,1.1vw,0.8rem); font-weight:600; color:#111827; margin-bottom:0.15rem; }
 .chart-sub { font-size:clamp(0.65rem,1vw,0.72rem); color:#9CA3AF; margin-bottom:0.6rem; }
@@ -240,9 +240,9 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 
         st.markdown("""
         <div style="padding:0.6rem 0 1rem;">
-            <div style="font-size:1.05rem; font-weight:600; color:#F1F5F9;
+            <div style="font-size:1.05rem; font-weight:600; color:#111827;
                         letter-spacing:-0.01em;">Pulse</div>
-            <div style="font-size:0.7rem; color:#475569; margin-top:2px;">
+            <div style="font-size:0.7rem; color:#9CA3AF; margin-top:2px;">
                 AI insight engine
             </div>
         </div>
@@ -252,7 +252,7 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 
         # ── Date window ───────────────────────────────────────────────────────
         st.markdown("""
-        <div style="font-size:0.62rem; font-weight:600; color:#475569;
+        <div style="font-size:0.62rem; font-weight:600; color:#9CA3AF;
         text-transform:uppercase; letter-spacing:0.09em; margin-bottom:0.6rem;">
         Date window
         </div>
@@ -292,11 +292,11 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         days = (end_date - start_date).days + 1
 
         st.markdown(
-            f"<div style='font-size:0.68rem; color:#475569; margin-top:0.4rem; "
-            f"padding:0.4rem 0.6rem; background:rgba(255,255,255,0.04); "
-            f"border-radius:6px; border:1px solid rgba(255,255,255,0.06);'>"
+            f"<div style='font-size:0.68rem; color:#6B7280; margin-top:0.4rem; "
+            f"padding:0.4rem 0.6rem; background:#F9FAFB; "
+            f"border-radius:6px; border:1px solid #E5E7EB;'>"
             f"{start_date.strftime('%b %d, %Y')} — {end_date.strftime('%b %d, %Y')} "
-            f"<span style='color:#3B82F6; font-weight:600;'>({days}d)</span></div>",
+            f"<span style='color:#1D4ED8; font-weight:600;'>({days}d)</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -314,7 +314,7 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 
         # ── Gemini API key ────────────────────────────────────────────────────
         st.markdown("""
-        <div style="font-size:0.62rem; font-weight:600; color:#475569;
+        <div style="font-size:0.62rem; font-weight:600; color:#9CA3AF;
         text-transform:uppercase; letter-spacing:0.09em; margin-bottom:0.5rem;">
         Gemini API key
         </div>
@@ -331,14 +331,14 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         if gemini_key:
             os.environ["GEMINI_API_KEY"] = gemini_key
             st.markdown("""
-            <div style="font-size:0.7rem; color:#34D399; margin-top:0.3rem;
+            <div style="font-size:0.7rem; color:#15803D; margin-top:0.3rem;
                         display:flex; align-items:center; gap:4px;">
                 <span style="font-size:0.6rem;">●</span> AI insights enabled
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
-            <div style="font-size:0.68rem; color:#475569; margin-top:0.3rem;">
+            <div style="font-size:0.68rem; color:#9CA3AF; margin-top:0.3rem;">
                 Get a free key at aistudio.google.com
             </div>
             """, unsafe_allow_html=True)
