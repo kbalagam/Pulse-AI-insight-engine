@@ -261,7 +261,9 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         preset = st.radio(
             "Date window",
             ["7d", "14d", "30d", "90d", "Custom"],
-            index=st.session_state.get("preset_index", 2),
+            index=["7d", "14d", "30d", "90d", "Custom"].index(
+                st.session_state.get("sidebar_preset", "30d")
+            ),
             horizontal=True,
             label_visibility="collapsed",
             key="sidebar_preset",
