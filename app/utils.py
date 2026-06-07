@@ -21,14 +21,17 @@ header[data-testid="stHeader"] { display: none !important; }
 section[data-testid="stSidebar"],
 section[data-testid="stSidebar"] > div,
 section[data-testid="stSidebar"] > div > div,
-section[data-testid="stSidebar"] > div > div > div {
+section[data-testdata="stSidebar"] > div > div > div {
     background: #0F172A !important;
 }
 section[data-testid="stSidebar"] * { color: #94A3B8 !important; }
 
-/* ── Kill white backgrounds on all sidebar widgets ── */
+/* ── Kill ALL white backgrounds in sidebar ── */
+section[data-testid="stSidebar"] .stRadio,
 section[data-testid="stSidebar"] .stRadio > div,
+section[data-testid="stSidebar"] .stRadio > div > div,
 section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"],
 section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
 section[data-testid="stSidebar"] .stDateInput,
@@ -42,9 +45,56 @@ section[data-testid="stSidebar"] [data-baseweb="input"],
 section[data-testid="stSidebar"] .stTextInput > div > div,
 section[data-testid="stSidebar"] .stToggle,
 section[data-testid="stSidebar"] .stToggle > div,
-section[data-testid="stSidebar"] .stToggle label {
+section[data-testid="stSidebar"] .stToggle label,
+section[data-testid="stSidebar"] [data-baseweb="radio"],
+section[data-testid="stSidebar"] [data-baseweb="radio"] > div,
+section[data-testid="stSidebar"] [role="radiogroup"],
+section[data-testid="stSidebar"] [role="radiogroup"] > div {
     background: transparent !important;
     background-color: transparent !important;
+}
+
+/* ── Hide default radio circles entirely ── */
+section[data-testid="stSidebar"] [data-baseweb="radio"] [data-testid="stMarkdownContainer"] ~ div,
+section[data-testid="stSidebar"] input[type="radio"] {
+    display: none !important;
+}
+
+/* ── Radio group — pill button layout ── */
+section[data-testid="stSidebar"] [role="radiogroup"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+section[data-testid="stSidebar"] [role="radiogroup"] label {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 4px 10px !important;
+    border-radius: 20px !important;
+    font-size: 0.72rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    color: #94A3B8 !important;
+    transition: all 0.15s ease !important;
+    white-space: nowrap !important;
+}
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover {
+    background: rgba(59,130,246,0.2) !important;
+    border-color: #3B82F6 !important;
+    color: #E2E8F0 !important;
+}
+section[data-testid="stSidebar"] [role="radiogroup"] label[data-checked="true"],
+section[data-testid="stSidebar"] [role="radiogroup"] [aria-checked="true"] label,
+section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+    background: #1E3A5F !important;
+    border-color: #3B82F6 !important;
+    color: #F1F5F9 !important;
+    font-weight: 600 !important;
 }
 
 /* ── Input fields ── */
@@ -57,18 +107,24 @@ section[data-testid="stSidebar"] .stDateInput input {
     color: #F1F5F9 !important;
     font-size: 0.8rem !important;
 }
-
-/* ── Radio ── */
-section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p,
-section[data-testid="stSidebar"] .stRadio label span {
-    color: #94A3B8 !important;
-    font-size: 0.78rem !important;
+section[data-testid="stSidebar"] .stTextInput input::placeholder {
+    color: #475569 !important;
 }
 
 /* ── Toggle ── */
 section[data-testid="stSidebar"] .stToggle p {
     color: #94A3B8 !important;
     font-size: 0.78rem !important;
+}
+
+/* ── Labels ── */
+section[data-testid="stSidebar"] label p,
+section[data-testid="stSidebar"] .stSelectbox label {
+    color: #64748B !important;
+    font-size: 0.68rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.07em !important;
 }
 
 /* ── Dividers ── */
@@ -78,7 +134,26 @@ section[data-testid="stSidebar"] hr {
 }
 
 /* ── Nav ── */
-section[data-testid="stSidebarNav"] { padding-top: 0 !important; }
+section[data-testid="stSidebarNav"] {
+    padding-top: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+}
+section[data-testid="stSidebarNav"]::before,
+section[data-testid="stSidebarNav"]::after {
+    display: none !important;
+    background: none !important;
+}
+section[data-testid="stSidebarNav"] ul {
+    overflow: visible !important;
+    padding-bottom: 0 !important;
+}
+section[data-testid="stSidebarNav"] > ul::before,
+section[data-testid="stSidebarNav"] > ul::after {
+    display: none !important;
+}
+[data-testid="stSidebarNavSeparator"] { display: none !important; }
+
 section[data-testid="stSidebarNav"] a {
     font-size: 0.82rem !important;
     font-weight: 400 !important;
@@ -86,6 +161,7 @@ section[data-testid="stSidebarNav"] a {
     padding: 0.45rem 0.9rem !important;
     border-radius: 6px !important;
     border-left: 2px solid transparent !important;
+    display: block !important;
 }
 section[data-testid="stSidebarNav"] a:hover {
     background: rgba(30,58,95,0.4) !important;
@@ -159,15 +235,14 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 </style>
 """, unsafe_allow_html=True)
 
-    # ── Sidebar — rendered on every page ─────────────────────────────────────
+    # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
 
-        # Brand
         st.markdown("""
-        <div style="padding:0.4rem 0 1rem;">
-            <div style="font-size:1.1rem; font-weight:600; color:#F1F5F9;
+        <div style="padding:0.6rem 0 1rem;">
+            <div style="font-size:1.05rem; font-weight:600; color:#F1F5F9;
                         letter-spacing:-0.01em;">Pulse</div>
-            <div style="font-size:0.72rem; color:#64748B; margin-top:2px;">
+            <div style="font-size:0.7rem; color:#475569; margin-top:2px;">
                 AI insight engine
             </div>
         </div>
@@ -177,8 +252,8 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 
         # ── Date window ───────────────────────────────────────────────────────
         st.markdown("""
-        <div style="font-size:0.65rem; font-weight:600; color:#64748B;
-        text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem;">
+        <div style="font-size:0.62rem; font-weight:600; color:#475569;
+        text-transform:uppercase; letter-spacing:0.09em; margin-bottom:0.6rem;">
         Date window
         </div>
         """, unsafe_allow_html=True)
@@ -217,13 +292,15 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         days = (end_date - start_date).days + 1
 
         st.markdown(
-            f"<div style='font-size:0.68rem; color:#64748B; margin-top:0.3rem;'>"
+            f"<div style='font-size:0.68rem; color:#475569; margin-top:0.4rem; "
+            f"padding:0.4rem 0.6rem; background:rgba(255,255,255,0.04); "
+            f"border-radius:6px; border:1px solid rgba(255,255,255,0.06);'>"
             f"{start_date.strftime('%b %d, %Y')} — {end_date.strftime('%b %d, %Y')} "
-            f"<span style='color:#475569;'>({days}d)</span></div>",
+            f"<span style='color:#3B82F6; font-weight:600;'>({days}d)</span></div>",
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
         # ── Top N ─────────────────────────────────────────────────────────────
         top_n = st.selectbox(
@@ -237,8 +314,8 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
 
         # ── Gemini API key ────────────────────────────────────────────────────
         st.markdown("""
-        <div style="font-size:0.65rem; font-weight:600; color:#64748B;
-        text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.4rem;">
+        <div style="font-size:0.62rem; font-weight:600; color:#475569;
+        text-transform:uppercase; letter-spacing:0.09em; margin-bottom:0.5rem;">
         Gemini API key
         </div>
         """, unsafe_allow_html=True)
@@ -254,14 +331,15 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         if gemini_key:
             os.environ["GEMINI_API_KEY"] = gemini_key
             st.markdown("""
-            <div style="font-size:0.7rem; color:#34D399; margin-top:0.3rem;">
-            AI insights enabled
+            <div style="font-size:0.7rem; color:#34D399; margin-top:0.3rem;
+                        display:flex; align-items:center; gap:4px;">
+                <span style="font-size:0.6rem;">●</span> AI insights enabled
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
-            <div style="font-size:0.7rem; color:#64748B; margin-top:0.3rem;">
-            Get a free key at aistudio.google.com
+            <div style="font-size:0.68rem; color:#475569; margin-top:0.3rem;">
+                Get a free key at aistudio.google.com
             </div>
             """, unsafe_allow_html=True)
 
@@ -274,9 +352,9 @@ section[data-testid="stSidebarNav"] a[aria-selected="true"] {
         )
 
     # ── Persist to session state ──────────────────────────────────────────────
-    st.session_state["start_date"]  = start_date
-    st.session_state["end_date"]    = end_date
-    st.session_state["days"]        = days
-    st.session_state["top_n"]       = int(top_n)
-    st.session_state["gemini_key"]  = gemini_key
-    st.session_state["ai_on"]       = ai_on
+    st.session_state["start_date"] = start_date
+    st.session_state["end_date"]   = end_date
+    st.session_state["days"]       = days
+    st.session_state["top_n"]      = int(top_n)
+    st.session_state["gemini_key"] = gemini_key
+    st.session_state["ai_on"]      = ai_on
