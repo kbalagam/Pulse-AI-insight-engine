@@ -5,7 +5,7 @@ Master-detail anomaly investigation with AI explanation per event.
 
 import sys
 import os
-import requests
+import datetime
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 APP  = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(APP))
+
 from utils import inject_styles
 inject_styles()
 
@@ -23,11 +24,6 @@ from analytics.metrics import load_daily_metrics, enrich_daily_metrics
 from analytics.anomaly import detect_all_anomalies, get_recent_anomalies
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _days(window: str) -> int:
-    return {"Last 7 days": 7, "Last 14 days": 14,
-            "Last 30 days": 30, "Last 90 days": 90}.get(window, 14)
-
 
 METRIC_LABELS = {
     "revenue":         "Revenue",
@@ -49,8 +45,7 @@ METRIC_FORMAT = {
     "spend":           lambda v: f"${v:,.0f}",
 }
 
-
-def _fmt(metric: str, value) -> str:
+def _fmt(metric, value):
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return "N/A"
     try:
@@ -58,8 +53,7 @@ def _fmt(metric: str, value) -> str:
     except Exception:
         return "N/A"
 
-
-def _gemini_explain(metric, direction, deviation_pct, anomaly_type, period_summary) -> str:
+def _gemini_explain(metric, direction, deviation_pct, anomaly_type, period_summary):
     api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
         return ""
@@ -75,18 +69,15 @@ def _gemini_explain(metric, direction, deviation_pct, anomaly_type, period_summa
     except Exception as e:
         return f"Error generating explanation: {e}"
 
-
 # ── Load data ─────────────────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner="Loading metrics...")
 def _load():
     return enrich_daily_metrics(load_daily_metrics())
 
-
 @st.cache_data(show_spinner="Running anomaly detection...")
 def _anomalies(_df):
     return detect_all_anomalies(_df)
-
 
 # ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -95,18 +86,20 @@ st.markdown("""
 <div class="page-sub">Statistical deviations detected across all tracked metrics</div>
 """, unsafe_allow_html=True)
 
-days    = _days(st.session_state.get("date_window", "Last 14 days"))
-has_key = bool(st.session_state.get("gemini_key", ""))
-ai_on   = st.session_state.get("ai_on", False)
+start_date = st.session_state.get("start_date", datetime.date(2023, 12, 2))
+end_date   = st.session_state.get("end_date",   datetime.date(2023, 12, 31))
+days       = st.session_state.get("days", 30)
+has_key    = bool(st.session_state.get("gemini_key", ""))
 
 df       = _load()
 all_anom = _anomalies(df)
-recent   = get_recent_anomalies(all_anom, days=days)
+recent   = get_recent_anomalies(all_anom, start_date=start_date, end_date=end_date)
 
 # ── Empty state ───────────────────────────────────────────────────────────────
 
 if recent.empty:
-    st.info(f"No anomalies detected in the last {days} days. Try expanding the date window.")
+    st.info(f"No anomalies detected from {start_date.strftime('%b %d')} to "
+            f"{end_date.strftime('%b %d, %Y')}. Try expanding the date window.")
     st.stop()
 
 # ── Filter bar ────────────────────────────────────────────────────────────────
@@ -142,10 +135,7 @@ log_col, detail_col = st.columns([1, 2.2], gap="small")
 # ── Left: anomaly log ─────────────────────────────────────────────────────────
 
 with log_col:
-    st.markdown(
-        '<div class="section-header">Anomaly log</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-header">Anomaly log</div>', unsafe_allow_html=True)
 
     selected_idx = st.session_state.get("selected_anomaly_idx", 0)
     selected_idx = min(selected_idx, len(recent) - 1)
@@ -156,13 +146,7 @@ with log_col:
         atype     = row.get("anomaly_type", "")
         dev       = row.get("deviation_pct", 0)
         date_str  = pd.Timestamp(row["date"]).strftime("%b %d, %Y")
-
-        badge_cls  = "badge-up" if "up" in direction else "badge-down"
-        sign       = "+" if "up" in direction else "-"
-        type_label = "Single-day spike" if atype == "single_day_spike" else "Sustained"
-        is_sel     = i == selected_idx
-        bg         = "#F0F4FF" if is_sel else "transparent"
-        border_l   = "3px solid #1D4ED8" if is_sel else "3px solid transparent"
+        sign      = "+" if "up" in direction else "-"
 
         if st.button(
             f"{METRIC_LABELS.get(metric, metric)} · {sign}{dev*100:.0f}% · {date_str}",
@@ -181,7 +165,6 @@ with detail_col:
     direction  = row.get("direction", "")
     atype      = row.get("anomaly_type", "")
     dev_pct    = row.get("deviation_pct", 0)
-    spike_pct  = row.get("spike_pct", 0)
     date_val   = pd.Timestamp(row["date"])
     col_mean   = f"{metric}_roll_mean"
     actual_val = row.get(metric)
@@ -193,7 +176,6 @@ with detail_col:
     type_label = "Single-day spike" if atype == "single_day_spike" else "Sustained deviation"
     delta_col  = "#15803D" if is_up else "#B91C1C"
 
-    # ── Stat row ──────────────────────────────────────────────────────────────
     st.markdown(
         f'<div class="section-header">'
         f'{METRIC_LABELS.get(metric, metric)} &nbsp;'
@@ -203,7 +185,6 @@ with detail_col:
     )
 
     s1, s2, s3, s4 = st.columns(4, gap="small")
-
     with s1:
         st.markdown(f"""
         <div class="kpi-card">
@@ -212,7 +193,6 @@ with detail_col:
             <div class="kpi-hint">On {date_val.strftime('%b %d, %Y')}</div>
         </div>
         """, unsafe_allow_html=True)
-
     with s2:
         st.markdown(f"""
         <div class="kpi-card">
@@ -221,7 +201,6 @@ with detail_col:
             <div class="kpi-hint">Rolling baseline</div>
         </div>
         """, unsafe_allow_html=True)
-
     with s3:
         st.markdown(f"""
         <div class="kpi-card">
@@ -230,7 +209,6 @@ with detail_col:
             <div class="kpi-hint">From rolling mean</div>
         </div>
         """, unsafe_allow_html=True)
-
     with s4:
         st.markdown(f"""
         <div class="kpi-card">
@@ -243,63 +221,52 @@ with detail_col:
     st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
     # ── Metric chart ──────────────────────────────────────────────────────────
-    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.markdown(
-        f'<div class="chart-title">{METRIC_LABELS.get(metric, metric)} · last {days} days</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="chart-sub">Flagged day highlighted · rolling average shown</div>',
-        unsafe_allow_html=True,
-    )
+        f'<div class="chart-title">{METRIC_LABELS.get(metric, metric)} · '
+        f'{start_date.strftime("%b %d")} – {end_date.strftime("%b %d, %Y")}</div>',
+        unsafe_allow_html=True)
+    st.markdown('<div class="chart-sub">Flagged day highlighted · rolling average shown</div>',
+                unsafe_allow_html=True)
 
-    chart_df = df.sort_values("date").tail(days).copy()
-    colors   = [
+    df["date"] = pd.to_datetime(df["date"])
+    chart_df = df[
+        (df["date"].dt.date >= start_date) &
+        (df["date"].dt.date <= end_date)
+    ].copy().sort_values("date")
+
+    colors = [
         "#E24B4A" if pd.Timestamp(d).date() == date_val.date() else "#BFDBFE"
         for d in chart_df["date"]
     ]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=chart_df["date"],
-        y=chart_df[metric],
+        x=chart_df["date"], y=chart_df[metric],
         name=METRIC_LABELS.get(metric, metric),
         marker_color=colors,
         hovertemplate=f"<b>%{{x|%b %d}}</b><br>{METRIC_LABELS.get(metric,metric)}: %{{y:.2f}}<extra></extra>",
     ))
     if col_mean in chart_df.columns:
         fig.add_trace(go.Scatter(
-            x=chart_df["date"],
-            y=chart_df[col_mean],
-            name="7-day avg",
+            x=chart_df["date"], y=chart_df[col_mean], name="7-day avg",
             line=dict(color="#1D4ED8", width=2),
             hovertemplate="<b>%{x|%b %d}</b><br>7d avg: %{y:.2f}<extra></extra>",
         ))
-
     fig.update_layout(
-        height=280,
-        margin=dict(l=0, r=0, t=8, b=0),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02,
-            xanchor="right", x=1, font=dict(size=11),
-        ),
+        height=280, margin=dict(l=0, r=0, t=8, b=0),
+        plot_bgcolor="white", paper_bgcolor="white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, font=dict(size=11)),
         xaxis=dict(showgrid=False, tickfont=dict(size=11), tickformat="%b %d"),
         yaxis=dict(showgrid=True, gridcolor="#F3F4F6", tickfont=dict(size=11)),
-        hovermode="x unified",
-        bargap=0.3,
+        hovermode="x unified", bargap=0.3,
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
     # ── AI explanation ────────────────────────────────────────────────────────
-    st.markdown(
-        '<div class="section-header">AI analysis</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-header">AI analysis</div>', unsafe_allow_html=True)
 
     if not has_key:
         st.markdown("""
@@ -310,44 +277,35 @@ with detail_col:
         """, unsafe_allow_html=True)
     else:
         explain_key = f"anomaly_explain_{metric}_{date_val.date()}"
-
         if explain_key not in st.session_state:
             if st.button("Generate AI analysis", key=f"gen_{explain_key}"):
                 with st.spinner("Analysing anomaly..."):
                     from analytics.metrics import compute_period_summary
                     period_ctx = compute_period_summary(df, days=7)
                     st.session_state[explain_key] = _gemini_explain(
-                        metric=metric,
-                        direction=direction,
-                        deviation_pct=dev_pct,
-                        anomaly_type=atype,
+                        metric=metric, direction=direction,
+                        deviation_pct=dev_pct, anomaly_type=atype,
                         period_summary=period_ctx,
                     )
-
         if explain_key in st.session_state:
             explanation = st.session_state[explain_key]
             if explanation:
-                sections = explanation.split("\n\n")
-                for section in sections:
+                for section in explanation.split("\n\n"):
                     lines = section.strip().split("\n")
                     if not lines:
                         continue
                     header = lines[0].strip()
-                    items  = lines[1:]
-
                     if header:
                         st.markdown(
-                            f"<div style='font-size:0.75rem; font-weight:600; "
-                            f"color:#374151; margin-bottom:0.35rem; margin-top:0.6rem;'>"
-                            f"{header}</div>",
+                            f"<div style='font-size:0.75rem; font-weight:600; color:#374151; "
+                            f"margin-bottom:0.35rem; margin-top:0.6rem;'>{header}</div>",
                             unsafe_allow_html=True,
                         )
-                    for item in items:
+                    for item in lines[1:]:
                         if item.strip():
                             st.markdown(
-                                f"<div style='font-size:0.78rem; color:#6B7280; "
-                                f"line-height:1.65; padding:0.2rem 0 0.2rem 0.8rem; "
-                                f"border-left:2px solid #E5E7EB; margin-bottom:0.3rem;'>"
-                                f"{item.strip()}</div>",
+                                f"<div style='font-size:0.78rem; color:#6B7280; line-height:1.65; "
+                                f"padding:0.2rem 0 0.2rem 0.8rem; border-left:2px solid #E5E7EB; "
+                                f"margin-bottom:0.3rem;'>{item.strip()}</div>",
                                 unsafe_allow_html=True,
                             )
