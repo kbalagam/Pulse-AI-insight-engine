@@ -4,6 +4,7 @@ Daily KPI summary, revenue trend, anomaly snapshot, and top products.
 """
 
 import sys
+import datetime
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -19,110 +20,77 @@ from utils import inject_styles
 inject_styles()
 
 from analytics.metrics import (
-    load_daily_metrics,
-    load_product_sales,
-    enrich_daily_metrics,
-    compute_period_summary,
-    compute_top_products,
-    load_channel_metrics,
-    compute_channel_summary,
+    load_daily_metrics, load_product_sales, enrich_daily_metrics,
+    compute_period_summary, compute_top_products,
+    load_channel_metrics, compute_channel_summary,
 )
 from analytics.anomaly import detect_all_anomalies, get_recent_anomalies
 from analytics.insights import compile_all_insights
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _days(window: str) -> int:
-    return {"Last 7 days": 7, "Last 14 days": 14,
-            "Last 30 days": 30, "Last 90 days": 90}.get(window, 7)
-
 def _fmt_currency(v) -> str:
-    if v is None or (isinstance(v, float) and np.isnan(v)):
-        return "N/A"
+    if v is None or (isinstance(v, float) and np.isnan(v)): return "N/A"
     return f"${v:,.0f}"
 
 def _fmt_pct(v) -> str:
-    if v is None or (isinstance(v, float) and np.isnan(v)):
-        return "N/A"
+    if v is None or (isinstance(v, float) and np.isnan(v)): return "N/A"
     sign = "+" if v > 0 else ""
     return f"{sign}{v * 100:.1f}%"
 
 def _fmt_x(v) -> str:
-    if v is None or (isinstance(v, float) and np.isnan(v)):
-        return "N/A"
+    if v is None or (isinstance(v, float) and np.isnan(v)): return "N/A"
     return f"{v:.2f}x"
 
 def _delta_class(v, inverse: bool = False) -> str:
-    if v is None or (isinstance(v, float) and np.isnan(v)):
-        return "kpi-delta-neu"
+    if v is None or (isinstance(v, float) and np.isnan(v)): return "kpi-delta-neu"
     positive = v > 0
-    if inverse:
-        positive = not positive
+    if inverse: positive = not positive
     return "kpi-delta-up" if positive else "kpi-delta-down"
 
 def _kpi_card(label, value, delta_str, delta_class, hint=""):
+    hint_html  = f"<div class='kpi-hint'>{hint}</div>" if hint else ""
+    delta_html = f"<span class='{delta_class}'>{delta_str}</span>" if delta_str else ""
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">{label}</div>
         <div class="kpi-value">{value}</div>
-        <div>
-            <span class="{delta_class}">{delta_str}</span>
-            {"<div class='kpi-hint'>" + hint + "</div>" if hint else ""}
-        </div>
+        <div>{delta_html}{hint_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
-def _ai_chart_insight(key: str, context: str, ai_on: bool, has_key: bool):
+def _ai_chart_insight(key, context, ai_on, has_key):
     with st.expander("AI insight for this chart"):
         if not has_key:
-            st.markdown(
-                '<div class="ai-placeholder">Add a Gemini API key in the sidebar to generate insights.</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="ai-placeholder">Add a Gemini API key in the sidebar.</div>',
+                        unsafe_allow_html=True)
             return
         if not ai_on:
-            st.markdown(
-                '<div class="ai-placeholder">Turn on "Show AI insights on charts" in the sidebar.</div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown('<div class="ai-placeholder">Turn on "Show AI insights on charts" in the sidebar.</div>',
+                        unsafe_allow_html=True)
             return
-        btn_key = f"btn_{key}"
-        res_key = f"res_{key}"
-        if st.button("Generate insight", key=btn_key):
+        if st.button("Generate insight", key=f"btn_{key}"):
             with st.spinner("Analysing..."):
                 try:
                     import requests, os
-                    prompt = (
-                        "You are a business analyst. Give 2-3 concise, specific, "
-                        "actionable observations about this chart in plain English. "
-                        "No bullet points. Do not start with 'I'.\n\n"
-                        f"Chart context: {context}"
-                    )
-                    url = (
-                        "https://generativelanguage.googleapis.com/v1/models/"
-                        f"gemini-2.0-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}"
-                    )
                     r = requests.post(
-                        url,
-                        json={
-                            "contents": [{"parts": [{"text": prompt}]}],
-                            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300},
-                        },
+                        f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}",
+                        json={"contents": [{"parts": [{"text": (
+                            "You are a business analyst. Give 2-3 concise, specific, actionable "
+                            "observations about this chart in plain English. No bullet points. "
+                            f"Do not start with 'I'.\n\nChart context: {context}"
+                        )}]}], "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300}},
                         timeout=30,
                     )
-                    result = (
+                    st.session_state[f"res_{key}"] = (
                         r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        if r.status_code == 200
-                        else f"API error {r.status_code}"
+                        if r.status_code == 200 else f"API error {r.status_code}"
                     )
                 except Exception as e:
-                    result = f"Error: {e}"
-            st.session_state[res_key] = result
-        if res_key in st.session_state:
-            st.markdown(
-                f'<div class="ai-insight-box">{st.session_state[res_key]}</div>',
-                unsafe_allow_html=True,
-            )
+                    st.session_state[f"res_{key}"] = f"Error: {e}"
+        if f"res_{key}" in st.session_state:
+            st.markdown(f'<div class="ai-insight-box">{st.session_state[f"res_{key}"]}</div>',
+                        unsafe_allow_html=True)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 
@@ -144,55 +112,58 @@ st.markdown("""
 <div class="page-sub">Daily performance summary</div>
 """, unsafe_allow_html=True)
 
-days    = _days(st.session_state.get("date_window", "Last 7 days"))
-top_n   = st.session_state.get("top_n", 5)
-has_key = bool(st.session_state.get("gemini_key", ""))
-ai_on   = st.session_state.get("ai_on", False)
+start_date = st.session_state.get("start_date", datetime.date(2023, 12, 2))
+end_date   = st.session_state.get("end_date",   datetime.date(2023, 12, 31))
+days       = st.session_state.get("days", 30)
+top_n      = st.session_state.get("top_n", 5)
+has_key    = bool(st.session_state.get("gemini_key", ""))
+ai_on      = st.session_state.get("ai_on", False)
 
 df, ch, prod = _load()
 all_anom     = _anomalies(df)
-recent_anom  = get_recent_anomalies(all_anom, days=days)
-period       = compute_period_summary(df, days=days)
-ch_sum       = compute_channel_summary(ch, days=days)
-top_prod     = compute_top_products(prod, n=top_n, days=days)
-insights     = compile_all_insights(period, recent_anom, ch_sum)
+
+recent_anom = get_recent_anomalies(all_anom, start_date=start_date, end_date=end_date)
+period      = compute_period_summary(df, days=days, start_date=start_date, end_date=end_date)
+ch_sum      = compute_channel_summary(ch, days=days, start_date=start_date, end_date=end_date)
+top_prod    = compute_top_products(prod, n=top_n, days=days, start_date=start_date, end_date=end_date)
+insights    = compile_all_insights(period, recent_anom, ch_sum)
+
+df["date"] = pd.to_datetime(df["date"])
+recent_df  = df[
+    (df["date"].dt.date >= start_date) &
+    (df["date"].dt.date <= end_date)
+].sort_values("date")
 
 # ── AI page summary ───────────────────────────────────────────────────────────
 
 if has_key:
-    sum_key = f"overview_summary_{days}"
+    sum_key = f"overview_summary_{start_date}_{end_date}"
     if sum_key not in st.session_state:
         with st.spinner("Generating AI summary..."):
             try:
                 from ai.gemini import generate_daily_narrative
                 st.session_state[sum_key] = generate_daily_narrative(
-                    insights, period, date_label=f"the last {days} days",
+                    insights, period,
+                    date_label=f"{start_date} to {end_date}",
                 )
             except Exception:
                 st.session_state[sum_key] = None
     narrative = st.session_state.get(sum_key)
     if narrative:
-        st.markdown(f"""
-        <div class="ai-strip">
-            <div class="ai-strip-label">AI summary</div>
-            {narrative}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="ai-strip"><div class="ai-strip-label">AI summary</div>{narrative}</div>',
+                    unsafe_allow_html=True)
 else:
-    st.markdown("""
-    <div class="ai-placeholder">
-        Add a Gemini API key in the sidebar to unlock the AI page summary.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="ai-placeholder">Add a Gemini API key in the sidebar to unlock the AI page summary.</div>',
+                unsafe_allow_html=True)
 
-# ── KPI row 1 ─────────────────────────────────────────────────────────────────
+# ── KPI cards ─────────────────────────────────────────────────────────────────
 
-rev  = period.get("revenue", {})
-ord_ = period.get("orders", {})
-cr   = period.get("conversion_rate", {})
-cac  = period.get("cac", {})
-roas = period.get("roas", {})
-aov  = period.get("aov", {})
+rev   = period.get("revenue", {})
+ord_  = period.get("orders", {})
+cr    = period.get("conversion_rate", {})
+cac   = period.get("cac", {})
+roas  = period.get("roas", {})
+aov   = period.get("aov", {})
 spend = period.get("spend", {})
 
 k1, k2, k3, k4 = st.columns(4, gap="small")
@@ -235,19 +206,20 @@ with k7:
 with k8:
     n_anom = len(recent_anom) if not recent_anom.empty else 0
     _kpi_card("Anomalies detected", str(n_anom),
-              f"last {days} days", "kpi-delta-neu",
+              f"{start_date.strftime('%b %d')} – {end_date.strftime('%b %d')}", "kpi-delta-neu",
               hint="See Anomalies page for detail")
+
+st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
 # ── Revenue chart + Anomaly snapshot ─────────────────────────────────────────
 
-st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 ch_left, ch_right = st.columns([1.6, 1], gap="small")
 
 with ch_left:
     st.markdown('<div class="chart-title">Daily revenue</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="chart-sub">Last {days} days with 7-day rolling average</div>',
-                unsafe_allow_html=True)
-    recent_df = df.sort_values("date").tail(days)
+    st.markdown(
+        f'<div class="chart-sub">{start_date.strftime("%b %d, %Y")} — {end_date.strftime("%b %d, %Y")} · 7-day rolling average</div>',
+        unsafe_allow_html=True)
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=recent_df["date"], y=recent_df["revenue"], name="Revenue",
@@ -270,22 +242,21 @@ with ch_left:
         hovermode="x unified", bargap=0.3,
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    _ai_chart_insight(
-        key="overview_revenue",
-        context=(f"Daily revenue bar chart for the last {days} days with 7-day rolling average. "
-                 f"Recent avg: {_fmt_currency(rev.get('recent_avg'))}, "
-                 f"prior avg: {_fmt_currency(rev.get('prior_avg'))}, "
-                 f"WoW change: {_fmt_pct(rev.get('pct_change'))}."),
-        ai_on=ai_on, has_key=has_key,
-    )
+    _ai_chart_insight("overview_revenue",
+                      f"Daily revenue bar chart from {start_date} to {end_date}. "
+                      f"Recent avg: {_fmt_currency(rev.get('recent_avg'))}, "
+                      f"prior avg: {_fmt_currency(rev.get('prior_avg'))}, "
+                      f"change: {_fmt_pct(rev.get('pct_change'))}.",
+                      ai_on, has_key)
 
 with ch_right:
     st.markdown('<div class="chart-title">Anomalies detected</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="chart-sub">Last {days} days · all metrics</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="chart-sub">{start_date.strftime("%b %d")} – {end_date.strftime("%b %d")} · all metrics</div>',
+        unsafe_allow_html=True)
     if recent_anom.empty:
         st.markdown("<div style='padding:1rem 0; color:#9CA3AF; font-size:0.8rem;'>"
-                    "No anomalies detected in this window.</div>", unsafe_allow_html=True)
+                    "No anomalies in this window.</div>", unsafe_allow_html=True)
     else:
         for _, row in recent_anom.head(6).iterrows():
             direction  = row.get("direction", "")
@@ -312,7 +283,9 @@ with ch_right:
 
 st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 st.markdown('<div class="chart-title">Conversion rate & AOV trend</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="chart-sub">Last {days} days · dual axis</div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div class="chart-sub">{start_date.strftime("%b %d, %Y")} — {end_date.strftime("%b %d, %Y")} · dual axis</div>',
+    unsafe_allow_html=True)
 
 fig2 = go.Figure()
 fig2.add_trace(go.Scatter(
@@ -338,18 +311,18 @@ fig2.update_layout(
     hovermode="x unified",
 )
 st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-_ai_chart_insight(
-    key="overview_cr_aov",
-    context=(f"Dual-axis line chart showing conversion rate and AOV over the last {days} days. "
-             f"Conversion rate recent avg: {cr.get('recent_avg', 0)*100:.2f}%, "
-             f"AOV recent avg: {_fmt_currency(aov.get('recent_avg'))}."),
-    ai_on=ai_on, has_key=has_key,
-)
+_ai_chart_insight("overview_cr_aov",
+                  f"Dual-axis chart from {start_date} to {end_date}. "
+                  f"Conv rate avg: {cr.get('recent_avg', 0)*100:.2f}%, "
+                  f"AOV avg: {_fmt_currency(aov.get('recent_avg'))}.",
+                  ai_on, has_key)
 
 # ── Top products ──────────────────────────────────────────────────────────────
 
-st.markdown(f'<div class="section-header">Top {top_n} products · last {days} days</div>',
-            unsafe_allow_html=True)
+st.markdown(
+    f'<div class="section-header">Top {top_n} products · {start_date.strftime("%b %d")} – {end_date.strftime("%b %d, %Y")}</div>',
+    unsafe_allow_html=True)
+
 if top_prod.empty:
     st.info("No product data available for this window.")
 else:
@@ -362,10 +335,8 @@ else:
     })[["Product", "Category", "Revenue", "Units sold"]]
     st.dataframe(top_prod_display, use_container_width=True, hide_index=True)
 
-_ai_chart_insight(
-    key="overview_products",
-    context=(f"Table of top {top_n} products by revenue over the last {days} days. "
-             f"Top product: {top_prod.iloc[0]['product_label'] if not top_prod.empty else 'N/A'} "
-             f"with revenue {_fmt_currency(top_prod.iloc[0]['revenue']) if not top_prod.empty else 'N/A'}."),
-    ai_on=ai_on, has_key=has_key,
-)
+_ai_chart_insight("overview_products",
+                  f"Top {top_n} products from {start_date} to {end_date}. "
+                  f"Top: {top_prod.iloc[0]['product_label'] if not top_prod.empty else 'N/A'} "
+                  f"at {_fmt_currency(top_prod.iloc[0]['revenue']) if not top_prod.empty else 'N/A'}.",
+                  ai_on, has_key)
