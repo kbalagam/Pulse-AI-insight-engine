@@ -14,13 +14,14 @@ Business rules applied (from requirements):
     - Anomaly confirmed: 2 consecutive flagged days OR 1-day spike >= 30%
 """
 
+import datetime
 import pandas as pd
 import numpy as np
 
-ROLLING_THRESHOLD = 1.8      # standard deviations from rolling mean
-PERCENT_THRESHOLD = 0.15     # 15% minimum deviation from rolling mean
-SPIKE_THRESHOLD = 0.30       # 30% single-day change
-CONSECUTIVE_DAYS = 2         # days before a moderate deviation is confirmed
+ROLLING_THRESHOLD = 1.8
+PERCENT_THRESHOLD = 0.15
+SPIKE_THRESHOLD   = 0.30
+CONSECUTIVE_DAYS  = 2
 
 
 def _pct_deviation(value: float, mean: float) -> float:
@@ -35,7 +36,7 @@ def detect_metric_anomalies(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     Adds columns: anomaly_type, deviation_pct, direction.
     """
     col_mean = f"{metric}_roll_mean"
-    col_std = f"{metric}_roll_std"
+    col_std  = f"{metric}_roll_std"
     col_prev = f"{metric}_prev_day"
 
     required = [metric, col_mean, col_std, col_prev]
@@ -44,51 +45,43 @@ def detect_metric_anomalies(df: pd.DataFrame, metric: str) -> pd.DataFrame:
 
     df = df.copy().sort_values("date").reset_index(drop=True)
 
-    # Percentage deviation from rolling mean
     df["_dev_pct"] = df.apply(
         lambda r: _pct_deviation(r[metric], r[col_mean]), axis=1
     )
-
-    # Single-day spike from prior day
     df["_spike_pct"] = np.where(
         df[col_prev] > 0,
         abs((df[metric] - df[col_prev]) / df[col_prev]),
         0.0,
     )
-
-    # Std-based flag
     df["_std_flag"] = (
         (df["_dev_pct"] >= PERCENT_THRESHOLD) &
         (df[col_std] > 0) &
         (abs(df[metric] - df[col_mean]) >= ROLLING_THRESHOLD * df[col_std])
     )
-
-    # Spike flag
     df["_spike_flag"] = df["_spike_pct"] >= SPIKE_THRESHOLD
-
-    # Consecutive flag: rolling sum of std_flag over 2 days
     df["_consec"] = df["_std_flag"].astype(int).rolling(
         window=CONSECUTIVE_DAYS, min_periods=CONSECUTIVE_DAYS
     ).sum()
-
     df["_is_anomaly"] = df["_spike_flag"] | (df["_consec"] >= CONSECUTIVE_DAYS)
 
     anomalies = df[df["_is_anomaly"]].copy()
     if anomalies.empty:
         return pd.DataFrame()
 
-    anomalies["metric"] = metric
+    anomalies["metric"]        = metric
     anomalies["deviation_pct"] = anomalies["_dev_pct"].round(4)
-    anomalies["spike_pct"] = anomalies["_spike_pct"].round(4)
-    anomalies["direction"] = np.where(
+    anomalies["spike_pct"]     = anomalies["_spike_pct"].round(4)
+    anomalies["direction"]     = np.where(
         anomalies[metric] > anomalies[col_mean], "spike_up", "spike_down"
     )
     anomalies["anomaly_type"] = np.where(
         anomalies["_spike_flag"], "single_day_spike", "sustained_deviation"
     )
 
-    return anomalies[["date", "metric", metric, col_mean, "deviation_pct",
-                       "spike_pct", "direction", "anomaly_type"]]
+    return anomalies[[
+        "date", "metric", metric, col_mean, "deviation_pct",
+        "spike_pct", "direction", "anomaly_type"
+    ]]
 
 
 def detect_all_anomalies(df: pd.DataFrame) -> pd.DataFrame:
@@ -108,13 +101,27 @@ def detect_all_anomalies(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     all_anomalies = pd.concat(frames, ignore_index=True)
-    all_anomalies = all_anomalies.sort_values("date", ascending=False).reset_index(drop=True)
-    return all_anomalies
+    return all_anomalies.sort_values("date", ascending=False).reset_index(drop=True)
 
 
-def get_recent_anomalies(df: pd.DataFrame, days: int = 14) -> pd.DataFrame:
-    """Returns anomalies from the most recent N days."""
+def get_recent_anomalies(
+    df: pd.DataFrame,
+    days: int = 14,
+    start_date: datetime.date = None,
+    end_date: datetime.date = None,
+) -> pd.DataFrame:
+    """Returns anomalies within the selected date range."""
     if df.empty:
         return df
-    cutoff = df["date"].max() - pd.Timedelta(days=days)
-    return df[df["date"] >= cutoff].reset_index(drop=True)
+
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
+    if start_date is not None and end_date is not None:
+        return df[
+            (df["date"].dt.date >= start_date) &
+            (df["date"].dt.date <= end_date)
+        ].reset_index(drop=True)
+    else:
+        cutoff = df["date"].max() - pd.Timedelta(days=days)
+        return df[df["date"] >= cutoff].reset_index(drop=True)
