@@ -4,6 +4,7 @@ Channel performance, spend vs return, and ROAS breakdown.
 """
 
 import sys
+import datetime
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -27,10 +28,6 @@ from analytics.anomaly import detect_all_anomalies, get_recent_anomalies
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _days(window: str) -> int:
-    return {"Last 7 days": 7, "Last 14 days": 14,
-            "Last 30 days": 30, "Last 90 days": 90}.get(window, 7)
-
 def _fmt_currency(v) -> str:
     if v is None or (isinstance(v, float) and np.isnan(v)): return "N/A"
     return f"${v:,.0f}"
@@ -44,25 +41,24 @@ def _fmt_x(v) -> str:
     if v is None or (isinstance(v, float) and np.isnan(v)): return "N/A"
     return f"{v:.2f}x"
 
-def _delta_class(v, inverse: bool = False) -> str:
+def _delta_class(v, inverse=False) -> str:
     if v is None or (isinstance(v, float) and np.isnan(v)): return "kpi-delta-neu"
     positive = v > 0
     if inverse: positive = not positive
     return "kpi-delta-up" if positive else "kpi-delta-down"
 
 def _kpi_card(label, value, delta_str, delta_class, hint=""):
+    hint_html  = f"<div class='kpi-hint'>{hint}</div>" if hint else ""
+    delta_html = f"<span class='{delta_class}'>{delta_str}</span>" if delta_str else ""
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">{label}</div>
         <div class="kpi-value">{value}</div>
-        <div>
-            <span class="{delta_class}">{delta_str}</span>
-            {"<div class='kpi-hint'>" + hint + "</div>" if hint else ""}
-        </div>
+        <div>{delta_html}{hint_html}</div>
     </div>
     """, unsafe_allow_html=True)
 
-def _ai_chart_insight(key: str, context: str, ai_on: bool, has_key: bool):
+def _ai_chart_insight(key, context, ai_on, has_key):
     with st.expander("AI insight for this chart"):
         if not has_key:
             st.markdown('<div class="ai-placeholder">Add a Gemini API key in the sidebar.</div>',
@@ -72,33 +68,27 @@ def _ai_chart_insight(key: str, context: str, ai_on: bool, has_key: bool):
             st.markdown('<div class="ai-placeholder">Turn on "Show AI insights on charts" in the sidebar.</div>',
                         unsafe_allow_html=True)
             return
-        btn_key = f"btn_{key}"
-        res_key = f"res_{key}"
-        if st.button("Generate insight", key=btn_key):
+        if st.button("Generate insight", key=f"btn_{key}"):
             with st.spinner("Analysing..."):
                 try:
                     import requests, os
-                    prompt = (
-                        "You are a marketing analyst. Give 2-3 concise, specific, "
-                        "actionable observations about this chart in plain English. "
-                        "No bullet points. Do not start with 'I'.\n\n"
-                        f"Chart context: {context}"
+                    r = requests.post(
+                        f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}",
+                        json={"contents": [{"parts": [{"text": (
+                            "You are a marketing analyst. Give 2-3 concise, specific, actionable "
+                            "observations about this chart in plain English. No bullet points. "
+                            f"Do not start with 'I'.\n\nChart context: {context}"
+                        )}]}], "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300}},
+                        timeout=30,
                     )
-                    url = (
-                        "https://generativelanguage.googleapis.com/v1/models/"
-                        f"gemini-2.0-flash:generateContent?key={os.getenv('GEMINI_API_KEY')}"
+                    st.session_state[f"res_{key}"] = (
+                        r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        if r.status_code == 200 else f"API error {r.status_code}"
                     )
-                    r = requests.post(url, json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300},
-                    }, timeout=30)
-                    result = (r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                              if r.status_code == 200 else f"API error {r.status_code}")
                 except Exception as e:
-                    result = f"Error: {e}"
-            st.session_state[res_key] = result
-        if res_key in st.session_state:
-            st.markdown(f'<div class="ai-insight-box">{st.session_state[res_key]}</div>',
+                    st.session_state[f"res_{key}"] = f"Error: {e}"
+        if f"res_{key}" in st.session_state:
+            st.markdown(f'<div class="ai-insight-box">{st.session_state[f"res_{key}"]}</div>',
                         unsafe_allow_html=True)
 
 # ── Load data ─────────────────────────────────────────────────────────────────
@@ -120,21 +110,23 @@ st.markdown("""
 <div class="page-sub">Channel performance, spend efficiency, and return on ad spend</div>
 """, unsafe_allow_html=True)
 
-days    = _days(st.session_state.get("date_window", "Last 7 days"))
-has_key = bool(st.session_state.get("gemini_key", ""))
-ai_on   = st.session_state.get("ai_on", False)
+start_date = st.session_state.get("start_date", datetime.date(2023, 12, 2))
+end_date   = st.session_state.get("end_date",   datetime.date(2023, 12, 31))
+days       = st.session_state.get("days", 30)
+has_key    = bool(st.session_state.get("gemini_key", ""))
+ai_on      = st.session_state.get("ai_on", False)
 
 ch, df   = _load()
 all_anom = _anomalies(df)
-recent   = get_recent_anomalies(all_anom, days=days)
-period   = compute_period_summary(df, days=days)
-ch_sum   = compute_channel_summary(ch, days=days)
+recent   = get_recent_anomalies(all_anom, start_date=start_date, end_date=end_date)
+period   = compute_period_summary(df, days=days, start_date=start_date, end_date=end_date)
+ch_sum   = compute_channel_summary(ch, days=days, start_date=start_date, end_date=end_date)
 ch_ins   = generate_channel_insights(ch_sum)
 
 # ── AI page summary ───────────────────────────────────────────────────────────
 
 if has_key and ch_ins:
-    sum_key = f"marketing_summary_{days}"
+    sum_key = f"marketing_summary_{start_date}_{end_date}"
     if sum_key not in st.session_state:
         with st.spinner("Generating AI summary..."):
             try:
@@ -147,18 +139,11 @@ if has_key and ch_ins:
                 st.session_state[sum_key] = None
     narrative = st.session_state.get(sum_key)
     if narrative:
-        st.markdown(f"""
-        <div class="ai-strip">
-            <div class="ai-strip-label">AI recommendations</div>
-            {narrative}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="ai-strip"><div class="ai-strip-label">AI recommendations</div>{narrative}</div>',
+                    unsafe_allow_html=True)
 else:
-    st.markdown("""
-    <div class="ai-placeholder">
-        Add a Gemini API key in the sidebar to unlock AI channel recommendations.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="ai-placeholder">Add a Gemini API key in the sidebar to unlock AI channel recommendations.</div>',
+                unsafe_allow_html=True)
 
 # ── KPI cards ─────────────────────────────────────────────────────────────────
 
@@ -176,12 +161,12 @@ with k1:
     _kpi_card("Total spend", _fmt_currency(total_spend),
               _fmt_pct(spend_period.get("pct_change")),
               _delta_class(spend_period.get("pct_change"), inverse=True),
-              hint=f"Last {days} days")
+              hint=f"{start_date.strftime('%b %d')} – {end_date.strftime('%b %d, %Y')}")
 with k2:
     _kpi_card("Revenue attributed", _fmt_currency(total_rev),
               _fmt_pct(roas_period.get("pct_change")),
               _delta_class(roas_period.get("pct_change")),
-              hint=f"Last {days} days")
+              hint=f"{start_date.strftime('%b %d')} – {end_date.strftime('%b %d, %Y')}")
 with k3:
     _kpi_card("Overall ROAS", _fmt_x(overall_roas),
               _fmt_pct(roas_period.get("pct_change")),
@@ -197,8 +182,9 @@ st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
 # ── Channel performance table ─────────────────────────────────────────────────
 
-st.markdown(f'<div class="section-header">Channel performance · last {days} days</div>',
-            unsafe_allow_html=True)
+st.markdown(
+    f'<div class="section-header">Channel performance · {start_date.strftime("%b %d")} – {end_date.strftime("%b %d, %Y")}</div>',
+    unsafe_allow_html=True)
 
 if ch_sum.empty:
     st.info("No channel data available for this window.")
@@ -224,7 +210,9 @@ chart_l, chart_r = st.columns(2, gap="small")
 
 with chart_l:
     st.markdown('<div class="chart-title">Spend vs revenue attributed</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="chart-sub">By channel · last {days} days</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="chart-sub">By channel · {start_date.strftime("%b %d")} – {end_date.strftime("%b %d, %Y")}</div>',
+        unsafe_allow_html=True)
     if not ch_sum.empty:
         ch_sorted = ch_sum.sort_values("spend", ascending=True)
         fig = go.Figure()
@@ -249,22 +237,20 @@ with chart_l:
             hovermode="y unified", bargap=0.25, bargroupgap=0.1,
         )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    _ai_chart_insight(
-        key="marketing_spend_rev",
-        context=(f"Horizontal grouped bar chart comparing spend vs revenue attributed "
-                 f"by channel over the last {days} days. "
-                 f"Total spend: {_fmt_currency(total_spend)}, "
-                 f"total revenue: {_fmt_currency(total_rev)}, "
-                 f"overall ROAS: {_fmt_x(overall_roas)}."),
-        ai_on=ai_on, has_key=has_key,
-    )
+    _ai_chart_insight("marketing_spend_rev",
+                      f"Spend vs revenue by channel from {start_date} to {end_date}. "
+                      f"Total spend: {_fmt_currency(total_spend)}, "
+                      f"total revenue: {_fmt_currency(total_rev)}, "
+                      f"overall ROAS: {_fmt_x(overall_roas)}.",
+                      ai_on, has_key)
 
 with chart_r:
     st.markdown('<div class="chart-title">ROAS by channel</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="chart-sub">Last {days} days · 1.0x = break even</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="chart-sub">{start_date.strftime("%b %d")} – {end_date.strftime("%b %d, %Y")} · 1.0x = break even</div>',
+        unsafe_allow_html=True)
     if not ch_sum.empty:
-        roas_df = ch_sum.dropna(subset=["roas"]).sort_values("roas", ascending=True)
+        roas_df    = ch_sum.dropna(subset=["roas"]).sort_values("roas", ascending=True)
         bar_colors = [
             "#E24B4A" if v < 1.5 else "#BFDBFE" if v < 3.0 else "#1D4ED8"
             for v in roas_df["roas"]
@@ -287,25 +273,27 @@ with chart_r:
             hovermode="y unified", bargap=0.3,
         )
         st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-    _ai_chart_insight(
-        key="marketing_roas",
-        context=(f"Horizontal bar chart of ROAS by channel over the last {days} days. "
-                 f"Bars below 1.5x are red, 1.5-3x light blue, above 3x dark blue."),
-        ai_on=ai_on, has_key=has_key,
-    )
+    _ai_chart_insight("marketing_roas",
+                      f"ROAS by channel from {start_date} to {end_date}. "
+                      f"Below 1.5x red, 1.5–3x light blue, above 3x dark blue.",
+                      ai_on, has_key)
 
 # ── Daily spend trend ─────────────────────────────────────────────────────────
 
 st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 st.markdown('<div class="chart-title">Daily spend by channel</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="chart-sub">Last {days} days · stacked</div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div class="chart-sub">{start_date.strftime("%b %d, %Y")} — {end_date.strftime("%b %d, %Y")} · stacked</div>',
+    unsafe_allow_html=True)
 
 recent_ch = ch.copy()
 recent_ch["date"] = pd.to_datetime(recent_ch["date"])
-cutoff    = recent_ch["date"].max() - pd.Timedelta(days=days - 1)
-recent_ch = recent_ch[recent_ch["date"] >= cutoff]
-channels  = recent_ch["channel"].unique()
-palette   = ["#1D4ED8", "#3B82F6", "#93C5FD", "#BFDBFE", "#DBEAFE", "#EFF6FF"]
+recent_ch = recent_ch[
+    (recent_ch["date"].dt.date >= start_date) &
+    (recent_ch["date"].dt.date <= end_date)
+]
+channels = recent_ch["channel"].unique()
+palette  = ["#1D4ED8", "#3B82F6", "#93C5FD", "#BFDBFE", "#DBEAFE", "#EFF6FF"]
 
 fig3 = go.Figure()
 for i, channel in enumerate(channels):
@@ -326,10 +314,7 @@ fig3.update_layout(
     hovermode="x unified", bargap=0.25,
 )
 st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
-_ai_chart_insight(
-    key="marketing_daily_spend",
-    context=(f"Stacked bar chart of daily spend by channel over the last {days} days. "
-             f"Channels: {', '.join(channels)}. "
-             f"Total spend in window: {_fmt_currency(total_spend)}."),
-    ai_on=ai_on, has_key=has_key,
-)
+_ai_chart_insight("marketing_daily_spend",
+                  f"Stacked daily spend by channel from {start_date} to {end_date}. "
+                  f"Channels: {', '.join(channels)}. Total spend: {_fmt_currency(total_spend)}.",
+                  ai_on, has_key)
